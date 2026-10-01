@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f7d5b">
+  <title>Gopher Turtle</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- Top bar: brand + audience filter -->
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true">
+        <ellipse cx="256" cy="300" rx="150" ry="104" fill="currentColor" opacity=".35"/>
+        <path d="M136 300a120 92 0 0 1 240 0z" fill="currentColor"/>
+        <circle cx="400" cy="250" r="44" fill="currentColor" opacity=".35"/>
+      </svg>
+      <h1>gopher turtle</h1>
+    </div>
+    <nav class="filters" id="filters" aria-label="Filter memos by audience">
+      <button class="chip" data-filter="close" data-aud="close" aria-pressed="false">Close friends</button>
+      <button class="chip" data-filter="followers" data-aud="followers" aria-pressed="false">Following</button>
+      <button class="chip" data-filter="global" data-aud="global" aria-pressed="false">Global</button>
+    </nav>
+  </header>
+
+  <!-- Screens -->
+  <main class="screens">
+    <section class="screen" id="screen-home" aria-label="Home feed">
+      <p class="feed-label" id="feed-label">Everything, newest first</p>
+      <ol class="feed" id="feed"></ol>
+    </section>
+
+    <section class="screen" id="screen-search" aria-label="Search" hidden>
+      <label class="search-box">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search-input" type="search" placeholder="Search people and memos" autocomplete="off">
+      </label>
+      <h2 class="section-title" id="people-title">People</h2>
+      <ul class="people" id="people"></ul>
+      <h2 class="section-title">Memos</h2>
+      <ol class="feed" id="search-results"></ol>
+    </section>
+
+    <section class="screen" id="screen-profile" aria-label="Your profile" hidden>
+      <div class="profile-head">
+        <div class="avatar avatar-lg" id="profile-avatar"></div>
+        <div>
+          <h2 class="profile-name" id="profile-name"></h2>
+          <p class="profile-handle" id="profile-handle"></p>
+        </div>
+      </div>
+      <dl class="stats">
+        <div><dt>Memos</dt><dd id="stat-memos">0</dd></div>
+        <div><dt>Followers</dt><dd>248</dd></div>
+        <div><dt>Following</dt><dd>131</dd></div>
+        <div><dt>Close friends</dt><dd>12</dd></div>
+      </dl>
+      <h2 class="section-title">Your memos</h2>
+      <ol class="feed" id="my-feed"></ol>
+    </section>
+  </main>
+
+  <!-- Bottom bar -->
+  <nav class="tabbar" aria-label="Main">
+    <button class="tab is-active" data-screen="home" aria-label="Home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="tab tab-post" id="post-btn" aria-label="Post a voice memo">
+      <span class="post-disc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </span>
+      <span>Post</span>
+    </button>
+    <button class="tab" data-screen="search" aria-label="Search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span>Search</span>
+    </button>
+    <button class="tab" data-screen="profile" aria-label="Profile">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>Profile</span>
+    </button>
+  </nav>
+
+  <!-- Recorder sheet -->
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <button class="text-btn" id="sheet-cancel">Cancel</button>
+      <h2 id="sheet-title">New voice memo</h2>
+      <span class="sheet-spacer"></span>
+    </header>
+
+    <p class="rec-note" id="rec-note" hidden></p>
+
+    <div class="rec-stage">
+      <canvas id="rec-wave" class="rec-wave" width="680" height="160" aria-hidden="true"></canvas>
+      <p class="rec-timer" id="rec-timer">0:00</p>
+      <p class="rec-limit">up to 1:00</p>
+    </div>
+
+    <div class="rec-controls">
+      <button class="ghost-btn" id="rec-redo" hidden>Redo</button>
+      <button class="rec-btn" id="rec-btn" aria-label="Start recording"><span class="rec-btn-core"></span></button>
+      <button class="ghost-btn" id="rec-play" hidden>Play</button>
+    </div>
+
+    <div class="post-form" id="post-form" hidden>
+      <fieldset class="audience" id="audience">
+        <legend>Who can hear this?</legend>
+        <label class="aud-opt" data-aud="close">
+          <input type="radio" name="audience" id="aud-close" value="close">
+          <span class="aud-dot"></span><span>Close friends</span>
+        </label>
+        <label class="aud-opt" data-aud="followers">
+          <input type="radio" name="audience" id="aud-followers" value="followers" checked>
+          <span class="aud-dot"></span><span>Followers only</span>
+        </label>
+        <label class="aud-opt" data-aud="global">
+          <input type="radio" name="audience" id="aud-global" value="global">
+          <span class="aud-dot"></span><span>Global</span>
+        </label>
+      </fieldset>
+      <label class="caption-field">
+        <span>Caption <em>(optional)</em></span>
+        <input id="caption" type="text" maxlength="120" placeholder="What's this about?">
+      </label>
+      <button class="primary-btn" id="post-submit">Post</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
