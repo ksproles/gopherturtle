@@ -530,6 +530,90 @@ button { cursor: pointer; }
   font-size: 16px;
 }
 
+/* ---------- Forms (sign in, delete account) ---------- */
+.form { display: grid; gap: 14px; margin-top: 16px; }
+.field { display: grid; gap: 6px; font-weight: 700; font-size: 14px; }
+.field input, .handle-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-weight: 500;
+  font-size: 16px; /* 16px stops iOS from zooming into inputs */
+}
+.field input:focus, .handle-input:focus-within { outline: none; border-color: var(--ink); }
+.handle-input { display: flex; align-items: center; gap: 2px; padding-block: 0; }
+.handle-input > span { color: var(--ink-2); }
+.handle-input input { flex: 1; min-width: 0; padding-inline: 0; border: 0; background: none; }
+.handle-input input:focus { outline: none; }
+.form-text { margin: 0; color: var(--ink-2); font-size: 14px; }
+.form-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--rec) 12%, transparent);
+  color: var(--rec);
+  font-size: 14px;
+  font-weight: 600;
+}
+.primary-btn:disabled { opacity: .55; cursor: progress; }
+.link-btn { padding: 6px; border: 0; background: none; color: var(--ink-2); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.danger { color: var(--rec); border-color: color-mix(in srgb, var(--rec) 40%, transparent); }
+.primary-btn.danger-btn { background: var(--rec); }
+
+/* ---------- Sign-in screen ---------- */
+.auth {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 40px) 24px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  background: var(--bg);
+}
+.auth-inner { max-width: 360px; margin: 0 auto; }
+.auth-brand { text-align: center; }
+.auth-mark { width: 72px; height: 72px; color: var(--shell); }
+.auth-brand h1 { margin: 6px 0 0; font: 800 34px/1 var(--font-display); letter-spacing: -.02em; }
+.auth-brand p { margin: 10px auto 0; max-width: 28ch; color: var(--ink-2); text-wrap: balance; }
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 28px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.auth-tabs button { padding: 9px; border: 0; border-radius: 11px; background: none; color: var(--ink-2); font-weight: 700; }
+.auth-tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.auth .primary-btn { margin-top: 4px; }
+.auth-links { display: flex; justify-content: center; }
+.auth[data-mode="reset"] .auth-tabs, .auth[data-mode="profile"] .auth-tabs { visibility: hidden; }
+
+/* ---------- Account ---------- */
+.account-email { margin: 0 2px 10px; color: var(--ink-2); overflow-wrap: anywhere; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.demo-note { margin: 24px 2px 0; color: var(--ink-2); font-size: 13px; text-align: center; }
+
+/* ---------- Follow buttons ---------- */
+.person-badges { display: flex; align-items: center; gap: 6px; }
+.follow-btn {
+  flex: none;
+  min-width: 92px;
+  padding: 7px 12px;
+  border: 1.5px solid var(--followers);
+  border-radius: 999px;
+  background: var(--followers);
+  color: var(--surface);
+  font-size: 13px;
+  font-weight: 700;
+}
+.follow-btn[aria-pressed="true"] { background: none; color: var(--followers); }
+.cf-tag { font-size: 11.5px; font-weight: 700; color: var(--close); }
+.act.act-delete { margin-left: auto; }
+.act.act-delete.confirm { color: var(--rec); }
+
 /* ---------- Toast ---------- */
 .toast {
   position: absolute;

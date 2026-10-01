@@ -1,0 +1,322 @@
+// Firebase backend: real accounts, shared memos, follows and private close friends.
+// Implements the same interface as backend-demo.js.
+//
+// Data model (enforced by firestore.rules / storage.rules):
+//   users/{uid}                      public profile {name, nameLower, handle, color, createdAt}
+//   users/{uid}/private/closeFriends {uids: [...]}  readable by the owner only
+//   handles/{handle}                 {uid}  keeps handles unique
+//   follows/{follower_target}        {follower, target, createdAt}
+//   memos/{memoId}                   {authorId, audience, createdAt, duration, caption, peaks, audioPath, likeCount}
+//   memos/{memoId}/likes/{uid}       {createdAt}
+//   feeds/{uid}/items/{memoId}       {authorId, audience, createdAt}  delivery of followers-only and close friends memos
+//   Storage: audio/{uid}/{memoId}
+import {
+  initializeApp,
+  initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, connectAuthEmulator,
+  onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signOut, sendPasswordResetEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
+  initializeFirestore, connectFirestoreEmulator,
+  collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy, limit,
+  writeBatch, runTransaction, serverTimestamp, increment, getCountFromServer,
+  getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL, deleteObject,
+} from './vendor/firebase.js';
+import { colorFor } from './audio-utils.js';
+
+const FEED_LIMIT = 100;
+const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
+
+export class BackendError extends Error {
+  constructor(code, message) { super(message); this.code = code; }
+}
+
+// Friendly messages for the Firebase errors people actually hit.
+export function friendlyError(e) {
+  const map = {
+    'auth/invalid-email': 'That email address doesn’t look right.',
+    'auth/missing-password': 'Enter your password.',
+    'auth/weak-password': 'Use a password with at least 6 characters.',
+    'auth/email-already-in-use': 'There’s already an account with that email. Try signing in.',
+    'auth/invalid-credential': 'Email or password is incorrect.',
+    'auth/wrong-password': 'Password is incorrect.',
+    'auth/user-not-found': 'No account uses that email.',
+    'auth/too-many-requests': 'Too many attempts. Wait a minute and try again.',
+    'auth/network-request-failed': 'Can’t reach the server. Check your connection.',
+    'auth/requires-recent-login': 'For your security, enter your password again.',
+    'permission-denied': 'You don’t have access to that.',
+    'unavailable': 'Can’t reach the server. Check your connection.',
+  };
+  return (e && (e instanceof BackendError ? e.message : map[e.code])) || 'Something went wrong. Try again.';
+}
+
+export function createFirebaseBackend(config, { emulators = false } = {}) {
+  const app = initializeApp(config);
+  // initializeAuth (not getAuth) so sign-in works inside the iOS/Android app shell.
+  const auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
+  const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+  const storage = getStorage(app);
+  if (emulators) {
+    const host = location.hostname || '127.0.0.1';
+    connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
+    connectFirestoreEmulator(db, host, 8080);
+    connectStorageEmulator(storage, host, 9199);
+  }
+
+  let me = null;              // public profile of the signed-in user
+  let following = new Set();  // uids I follow
+  let closeIds = new Set();   // my private close friends list
+  const users = new Map();    // uid -> profile cache
+  const memoCache = new Map();
+
+  const uid = () => auth.currentUser && auth.currentUser.uid;
+  const toMs = t => (t && t.toMillis ? t.toMillis() : Date.now());
+
+  async function getUser(id) {
+    if (users.has(id)) return users.get(id);
+    const snap = await getDoc(doc(db, 'users', id));
+    const u = snap.exists()
+      ? { id, ...snap.data() }
+      : { id, name: 'Deleted account', handle: 'deleted', color: '#7a857c' };
+    users.set(id, u);
+    return u;
+  }
+
+  async function loadSelf() {
+    const id = uid();
+    const snap = await getDoc(doc(db, 'users', id));
+    if (!snap.exists()) { me = null; return null; }
+    me = { id, ...snap.data() };
+    users.set(id, me);
+    const [fs, cf] = await Promise.all([
+      getDocs(query(collection(db, 'follows'), where('follower', '==', id))),
+      getDoc(doc(db, 'users', id, 'private', 'closeFriends')),
+    ]);
+    following = new Set(fs.docs.map(d => d.data().target));
+    closeIds = new Set(cf.exists() ? cf.data().uids || [] : []);
+    return me;
+  }
+
+  async function toMemo(snap) {
+    const d = snap.data();
+    const [author, likeSnap] = await Promise.all([
+      getUser(d.authorId),
+      getDoc(doc(db, 'memos', snap.id, 'likes', uid())).catch(() => null),
+    ]);
+    const m = {
+      id: snap.id,
+      userId: d.authorId,
+      author,
+      audience: d.audience,
+      createdAt: toMs(d.createdAt),
+      duration: d.duration,
+      caption: d.caption || '',
+      peaks: d.peaks || [],
+      likes: d.likeCount || 0,
+      liked: !!(likeSnap && likeSnap.exists()),
+      audioPath: d.audioPath,
+    };
+    memoCache.set(m.id, m);
+    return m;
+  }
+
+  async function fanOut(memoId, audience) {
+    let recipients = [];
+    if (audience === 'followers') {
+      const fs = await getDocs(query(collection(db, 'follows'), where('target', '==', uid())));
+      recipients = fs.docs.map(d => d.data().follower);
+    } else if (audience === 'close') {
+      recipients = [...closeIds];
+    }
+    // One write per recipient: each is checked by the rules on its own.
+    const item = { authorId: uid(), audience, createdAt: serverTimestamp() };
+    const results = await Promise.allSettled(
+      recipients.map(r => setDoc(doc(db, 'feeds', r, 'items', memoId), item)));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed) console.warn(`Memo ${memoId}: ${failed} of ${recipients.length} deliveries failed`);
+  }
+
+  const api = {
+    mode: 'firebase',
+    get me() { return me; },
+    get email() { return auth.currentUser ? auth.currentUser.email : ''; },
+    get signedIn() { return !!auth.currentUser; },
+
+    // Calls onUser(profile) when signed in with a profile, onUser(null) when signed out,
+    // and onUser({needsProfile: true}) when signed in but no handle has been chosen yet.
+    init(onUser) {
+      onAuthStateChanged(auth, async user => {
+        if (!user) { me = null; users.clear(); memoCache.clear(); onUser(null); return; }
+        try {
+          const profile = await loadSelf();
+          onUser(profile || { needsProfile: true, email: user.email });
+        } catch (e) {
+          console.error(e);
+          onUser({ error: friendlyError(e) });
+        }
+      });
+    },
+
+    async handleAvailable(handle) {
+      const snap = await getDoc(doc(db, 'handles', handle));
+      return !snap.exists();
+    },
+
+    async signUp({ email, password, name, handle }) {
+      handle = handle.trim().toLowerCase();
+      if (!HANDLE_RE.test(handle)) throw new BackendError('bad-handle', 'Handles use 3–20 lowercase letters, numbers or _.');
+      if (!(await api.handleAvailable(handle))) throw new BackendError('handle-taken', `@${handle} is taken. Try another.`);
+      await createUserWithEmailAndPassword(auth, email.trim(), password);
+      return api.createProfile({ name, handle });
+    },
+
+    async createProfile({ name, handle }) {
+      handle = handle.trim().toLowerCase();
+      name = name.trim();
+      if (!name) throw new BackendError('bad-name', 'Enter your name.');
+      if (!HANDLE_RE.test(handle)) throw new BackendError('bad-handle', 'Handles use 3–20 lowercase letters, numbers or _.');
+      const id = uid();
+      await runTransaction(db, async tx => {
+        const h = await tx.get(doc(db, 'handles', handle));
+        if (h.exists()) throw new BackendError('handle-taken', `@${handle} is taken. Try another.`);
+        tx.set(doc(db, 'handles', handle), { uid: id });
+        tx.set(doc(db, 'users', id), {
+          name, nameLower: name.toLowerCase(), handle, color: colorFor(id), createdAt: serverTimestamp(),
+        });
+      });
+      return loadSelf();
+    },
+
+    signIn: (email, password) => signInWithEmailAndPassword(auth, email.trim(), password),
+    signOut: () => signOut(auth),
+    resetPassword: email => sendPasswordResetEmail(auth, email.trim()),
+
+    async loadFeed() {
+      const id = uid();
+      const memosCol = collection(db, 'memos');
+      const [inbox, global, mine] = await Promise.all([
+        getDocs(query(collection(db, 'feeds', id, 'items'), orderBy('createdAt', 'desc'), limit(FEED_LIMIT))),
+        getDocs(query(memosCol, where('audience', '==', 'global'), orderBy('createdAt', 'desc'), limit(50))),
+        getDocs(query(memosCol, where('authorId', '==', id), orderBy('createdAt', 'desc'), limit(50))),
+      ]);
+      const snaps = new Map();
+      [...global.docs, ...mine.docs].forEach(s => snaps.set(s.id, s));
+      // Delivered memos: fetch each one; deleted memos simply fail and are skipped.
+      const delivered = await Promise.all(inbox.docs
+        .filter(s => !snaps.has(s.id))
+        .map(s => getDoc(doc(db, 'memos', s.id)).catch(() => null)));
+      delivered.forEach(s => { if (s && s.exists()) snaps.set(s.id, s); });
+      return Promise.all([...snaps.values()].map(toMemo));
+    },
+
+    async audioUrl(m) {
+      return getDownloadURL(ref(storage, m.audioPath));
+    },
+
+    async postMemo({ blob, duration, audience, caption, peaks }) {
+      const id = uid();
+      const memoRef = doc(collection(db, 'memos'));
+      const audioPath = `audio/${id}/${memoRef.id}`;
+      await uploadBytes(ref(storage, audioPath), blob, { contentType: (blob.type || 'audio/webm').split(';')[0] });
+      await setDoc(memoRef, {
+        authorId: id, audience, createdAt: serverTimestamp(),
+        duration: Math.round(duration * 10) / 10, caption, peaks, audioPath, likeCount: 0,
+      });
+      await fanOut(memoRef.id, audience);
+      return toMemo(await getDoc(memoRef));
+    },
+
+    async deleteMemo(m) {
+      await deleteObject(ref(storage, m.audioPath)).catch(e => {
+        if (e.code !== 'storage/object-not-found') throw e;
+      });
+      await deleteDoc(doc(db, 'memos', m.id));
+      memoCache.delete(m.id);
+    },
+
+    async toggleLike(m) {
+      const memoRef = doc(db, 'memos', m.id);
+      const likeRef = doc(db, 'memos', m.id, 'likes', uid());
+      const liked = !m.liked;
+      const batch = writeBatch(db);
+      if (liked) batch.set(likeRef, { createdAt: serverTimestamp() });
+      else batch.delete(likeRef);
+      batch.update(memoRef, { likeCount: increment(liked ? 1 : -1) });
+      await batch.commit();
+      return { liked, likes: Math.max(0, m.likes + (liked ? 1 : -1)) };
+    },
+
+    async searchPeople(q) {
+      q = q.trim().toLowerCase().replace(/^@/, '');
+      const usersCol = collection(db, 'users');
+      let snaps;
+      if (!q) {
+        snaps = (await getDocs(query(usersCol, orderBy('createdAt', 'desc'), limit(25)))).docs;
+      } else {
+        const end = q + '';
+        const [byHandle, byName] = await Promise.all([
+          getDocs(query(usersCol, where('handle', '>=', q), where('handle', '<=', end), limit(20))),
+          getDocs(query(usersCol, where('nameLower', '>=', q), where('nameLower', '<=', end), limit(20))),
+        ]);
+        const seen = new Map();
+        [...byHandle.docs, ...byName.docs].forEach(s => seen.set(s.id, s));
+        snaps = [...seen.values()];
+      }
+      return snaps
+        .filter(s => s.id !== uid())
+        .map(s => {
+          const u = { id: s.id, ...s.data() };
+          users.set(u.id, u);
+          return { ...u, following: following.has(u.id), close: closeIds.has(u.id) };
+        });
+    },
+
+    async follow(target) {
+      await setDoc(doc(db, 'follows', `${uid()}_${target}`), { follower: uid(), target, createdAt: serverTimestamp() });
+      following.add(target);
+    },
+    async unfollow(target) {
+      await deleteDoc(doc(db, 'follows', `${uid()}_${target}`));
+      following.delete(target);
+    },
+
+    async closeFriendCandidates() {
+      const fs = await getDocs(query(collection(db, 'follows'), where('target', '==', uid())));
+      const ids = new Set([...following, ...closeIds, ...fs.docs.map(d => d.data().follower)]);
+      const list = await Promise.all([...ids].map(getUser));
+      return list
+        .filter(u => u.handle !== 'deleted')
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(u => ({ ...u, following: following.has(u.id), close: closeIds.has(u.id) }));
+    },
+    async getCloseFriends() { return new Set(closeIds); },
+    async setCloseFriends(ids) {
+      const next = [...new Set(ids)];
+      await setDoc(doc(db, 'users', uid(), 'private', 'closeFriends'), { uids: next });
+      closeIds = new Set(next);
+    },
+
+    async stats() {
+      const c = await getCountFromServer(query(collection(db, 'follows'), where('target', '==', uid())));
+      return { followers: c.data().count, following: following.size };
+    },
+
+    // Deletes the profile, memos, audio, follows and lists, then the sign-in account.
+    async deleteAccount(password) {
+      const user = auth.currentUser;
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+      const id = user.uid;
+      const mine = await getDocs(query(collection(db, 'memos'), where('authorId', '==', id)));
+      for (const s of mine.docs) await api.deleteMemo({ id: s.id, audioPath: s.data().audioPath });
+      const [out, inc, inbox] = await Promise.all([
+        getDocs(query(collection(db, 'follows'), where('follower', '==', id))),
+        getDocs(query(collection(db, 'follows'), where('target', '==', id))),
+        getDocs(collection(db, 'feeds', id, 'items')),
+      ]);
+      await Promise.all([...out.docs, ...inc.docs, ...inbox.docs].map(s => deleteDoc(s.ref)));
+      await deleteDoc(doc(db, 'users', id, 'private', 'closeFriends'));
+      if (me && me.handle) await deleteDoc(doc(db, 'handles', me.handle));
+      await deleteDoc(doc(db, 'users', id));
+      await deleteUser(user);
+    },
+  };
+  return api;
+}

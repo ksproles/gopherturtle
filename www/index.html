@@ -58,19 +58,29 @@
       </div>
       <dl class="stats">
         <div><dt>Memos</dt><dd id="stat-memos">0</dd></div>
-        <div><dt>Followers</dt><dd>248</dd></div>
-        <div><dt>Following</dt><dd>131</dd></div>
+        <div><dt>Followers</dt><dd id="stat-followers">–</dd></div>
+        <div><dt>Following</dt><dd id="stat-following">–</dd></div>
       </dl>
       <button class="private-row" id="cf-open" data-aud="close">
         <span class="private-dot"></span>
         <span class="private-text">
           <span class="private-title">Close friends list</span>
-          <span class="private-sub"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Only you can see this list · <span id="cf-count">0</span> people</span>
+          <span class="private-sub"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Only you can see this list · <span id="cf-count">0 people</span></span>
         </span>
         <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
       <h2 class="section-title">Your memos</h2>
       <ol class="feed" id="my-feed"></ol>
+
+      <div class="account" id="account" hidden>
+        <h2 class="section-title">Account</h2>
+        <p class="account-email" id="account-email"></p>
+        <div class="account-actions">
+          <button class="ghost-btn" id="sign-out">Sign out</button>
+          <button class="ghost-btn danger" id="delete-open">Delete account</button>
+        </div>
+      </div>
+      <p class="demo-note" id="demo-note" hidden>Demo mode: example people and memos, saved on this device only.</p>
     </section>
   </main>
 
@@ -159,6 +169,25 @@
     <ul class="cf-list" id="cf-list"></ul>
   </section>
 
+  <!-- Delete account -->
+  <section class="sheet" id="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <button class="text-btn" id="delete-cancel">Cancel</button>
+      <h2 id="delete-title">Delete account</h2>
+      <span class="sheet-spacer"></span>
+    </header>
+    <form class="form" id="delete-form" novalidate>
+      <p class="form-text">This permanently deletes your profile, every memo you’ve posted, your followers and following, and your close friends list. It can’t be undone.</p>
+      <label class="field">
+        <span>Enter your password to confirm</span>
+        <input id="delete-password" type="password" autocomplete="current-password" required>
+      </label>
+      <p class="form-error" id="delete-error" role="alert" hidden></p>
+      <button class="primary-btn danger-btn" id="delete-submit" type="submit">Delete my account</button>
+    </form>
+  </section>
+
   <!-- Playback speed menu (hold the play button) -->
   <div class="speed-menu" id="speed-menu" role="menu" aria-label="Playback speed" hidden>
     <button role="menuitemradio" data-rate="1">1×</button>
@@ -167,8 +196,55 @@
     <button role="menuitemradio" data-rate="2">2×</button>
   </div>
 
+  <!-- Sign in / create account (only when Firebase is configured) -->
+  <section class="auth" id="auth" aria-labelledby="auth-title" hidden>
+    <div class="auth-inner">
+      <div class="auth-brand">
+        <svg class="auth-mark" viewBox="0 0 512 512" aria-hidden="true">
+          <ellipse cx="256" cy="300" rx="150" ry="104" fill="currentColor" opacity=".35"/>
+          <path d="M136 300a120 92 0 0 1 240 0z" fill="currentColor"/>
+          <circle cx="400" cy="250" r="44" fill="currentColor" opacity=".35"/>
+        </svg>
+        <h1 id="auth-title">gopher turtle</h1>
+        <p>Voice memos from close friends, people you follow, and the world.</p>
+      </div>
+
+      <div class="auth-tabs" role="tablist" id="auth-tabs">
+        <button role="tab" id="tab-signin" data-mode="signin" aria-selected="true">Sign in</button>
+        <button role="tab" id="tab-signup" data-mode="signup" aria-selected="false">Create account</button>
+      </div>
+
+      <form class="form" id="auth-form" novalidate>
+        <label class="field" data-for="signup profile">
+          <span>Name</span>
+          <input id="auth-name" type="text" autocomplete="name" maxlength="40">
+        </label>
+        <label class="field" data-for="signup profile">
+          <span>Handle</span>
+          <span class="handle-input"><span>@</span><input id="auth-handle" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="lowercase_letters"></span>
+        </label>
+        <label class="field" data-for="signin signup reset">
+          <span>Email</span>
+          <input id="auth-email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false">
+        </label>
+        <label class="field" data-for="signin signup">
+          <span>Password</span>
+          <input id="auth-password" type="password" autocomplete="current-password" minlength="6">
+        </label>
+        <p class="form-text" id="auth-hint" hidden></p>
+        <p class="form-error" id="auth-error" role="alert" hidden></p>
+        <button class="primary-btn" id="auth-submit" type="submit">Sign in</button>
+        <div class="auth-links">
+          <button type="button" class="link-btn" id="auth-forgot" data-for="signin">Forgot password?</button>
+          <button type="button" class="link-btn" id="auth-back" data-for="reset">Back to sign in</button>
+          <button type="button" class="link-btn" id="auth-signout" data-for="profile">Use a different account</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

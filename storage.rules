@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Memo audio lives at audio/{authorUid}/{memoId}. Listening follows the same
+// rules as reading the memo in Firestore.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /audio/{uid}/{memoId} {
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 25 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && (
+        request.auth.uid == uid
+        || firestore.get(/databases/(default)/documents/memos/$(memoId)).data.audience == 'global'
+        || firestore.exists(/databases/(default)/documents/feeds/$(request.auth.uid)/items/$(memoId)));
+    }
+  }
+}

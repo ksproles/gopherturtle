@@ -1,0 +1,205 @@
+// Security rules tests. Run with: npm run test:rules
+// Starts the Firestore + Storage emulators and checks who can read and write what.
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
+import {
+  doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc, collection, query, where, orderBy,
+  writeBatch, serverTimestamp, increment,
+} from 'firebase/firestore';
+import { ref, uploadBytes, getBytes } from 'firebase/storage';
+
+const env = await initializeTestEnvironment({
+  projectId: 'demo-gopherturtle',
+  firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 },
+  storage: { rules: readFileSync('storage.rules', 'utf8'), host: '127.0.0.1', port: 9199 },
+});
+
+const as = uid => env.authenticatedContext(uid);
+const db = uid => as(uid).firestore();
+const st = uid => as(uid).storage();
+const anon = env.unauthenticatedContext().firestore();
+
+let passed = 0;
+async function test(name, fn) {
+  try { await fn(); passed++; console.log('  ✓', name); }
+  catch (e) { console.error('  ✗', name, '\n   ', e.message); process.exitCode = 1; }
+}
+
+async function createProfile(uid, handle, name) {
+  const d = db(uid);
+  const b = writeBatch(d);
+  b.set(doc(d, 'handles', handle), { uid });
+  b.set(doc(d, 'users', uid), { name, nameLower: name.toLowerCase(), handle, color: '#2f6b4f', createdAt: serverTimestamp() });
+  return b.commit();
+}
+function memoData(uid, id, audience, extra = {}) {
+  return {
+    authorId: uid, audience, createdAt: serverTimestamp(), duration: 12.3, caption: 'hello',
+    peaks: [0.1, 0.5], audioPath: `audio/${uid}/${id}`, likeCount: 0, ...extra,
+  };
+}
+const audio = new Uint8Array([1, 2, 3, 4]);
+
+await env.clearFirestore();
+await env.clearStorage();
+console.log('Profiles and handles');
+
+await test('people can create a profile with a free handle', async () => {
+  await assertSucceeds(createProfile('alice', 'alice', 'Alice'));
+  await assertSucceeds(createProfile('bob', 'bob', 'Bob'));
+  await assertSucceeds(createProfile('carol', 'carol', 'Carol'));
+});
+await test('a taken handle cannot be claimed', async () => {
+  await assertFails(createProfile('mallory', 'alice', 'Mallory'));
+});
+await test('you cannot create someone else’s profile', async () => {
+  const d = db('mallory');
+  await assertFails(setDoc(doc(d, 'users', 'dave'), { name: 'Dave', nameLower: 'dave', handle: 'dave', color: '#000', createdAt: serverTimestamp() }));
+});
+await test('signed-out visitors cannot read profiles', async () => {
+  await assertFails(getDoc(doc(anon, 'users', 'alice')));
+});
+await test('you cannot change your handle by editing your profile', async () => {
+  await assertFails(updateDoc(doc(db('alice'), 'users', 'alice'), { handle: 'bob' }));
+});
+
+console.log('Follows');
+await test('alice can follow bob', async () => {
+  await assertSucceeds(setDoc(doc(db('alice'), 'follows', 'alice_bob'), { follower: 'alice', target: 'bob', createdAt: serverTimestamp() }));
+});
+await test('you cannot make someone else follow a person', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'follows', 'carol_bob'), { follower: 'carol', target: 'bob', createdAt: serverTimestamp() }));
+});
+await test('you cannot follow yourself', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'follows', 'alice_alice'), { follower: 'alice', target: 'alice', createdAt: serverTimestamp() }));
+});
+
+console.log('Close friends list is private');
+await test('bob can save his close friends list', async () => {
+  await assertSucceeds(setDoc(doc(db('bob'), 'users', 'bob', 'private', 'closeFriends'), { uids: ['carol'] }));
+});
+await test('nobody else can read bob’s close friends list', async () => {
+  await assertFails(getDoc(doc(db('carol'), 'users', 'bob', 'private', 'closeFriends')));
+  await assertFails(getDoc(doc(db('alice'), 'users', 'bob', 'private', 'closeFriends')));
+});
+await test('nobody else can change bob’s close friends list', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'users', 'bob', 'private', 'closeFriends'), { uids: ['alice'] }));
+});
+
+console.log('Posting memos');
+await test('bob can post memos for each audience', async () => {
+  const d = db('bob');
+  await assertSucceeds(setDoc(doc(d, 'memos', 'm-followers'), memoData('bob', 'm-followers', 'followers')));
+  await assertSucceeds(setDoc(doc(d, 'memos', 'm-close'), memoData('bob', 'm-close', 'close')));
+  await assertSucceeds(setDoc(doc(d, 'memos', 'm-global'), memoData('bob', 'm-global', 'global')));
+});
+await test('you cannot post a memo as someone else', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'memos', 'fake'), memoData('bob', 'fake', 'global')));
+});
+await test('memos cannot start with fake likes or a long caption', async () => {
+  await assertFails(setDoc(doc(db('bob'), 'memos', 'x1'), memoData('bob', 'x1', 'global', { likeCount: 99 })));
+  await assertFails(setDoc(doc(db('bob'), 'memos', 'x2'), memoData('bob', 'x2', 'global', { caption: 'x'.repeat(121) })));
+  await assertFails(setDoc(doc(db('bob'), 'memos', 'x3'), memoData('bob', 'x3', 'global', { duration: 400 })));
+});
+
+console.log('Delivering memos');
+const item = audience => ({ authorId: 'bob', audience, createdAt: serverTimestamp() });
+await test('followers-only memos can be delivered to followers', async () => {
+  await assertSucceeds(setDoc(doc(db('bob'), 'feeds', 'alice', 'items', 'm-followers'), item('followers')));
+});
+await test('followers-only memos cannot be delivered to non-followers', async () => {
+  await assertFails(setDoc(doc(db('bob'), 'feeds', 'carol', 'items', 'm-followers'), item('followers')));
+});
+await test('close friends memos can be delivered to people on the list', async () => {
+  await assertSucceeds(setDoc(doc(db('bob'), 'feeds', 'carol', 'items', 'm-close'), item('close')));
+});
+await test('close friends memos cannot be delivered to people not on the list', async () => {
+  await assertFails(setDoc(doc(db('bob'), 'feeds', 'alice', 'items', 'm-close'), item('close')));
+});
+await test('you cannot deliver someone else’s memo', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'feeds', 'carol', 'items', 'm-global'), { authorId: 'alice', audience: 'close', createdAt: serverTimestamp() }));
+});
+await test('you can only read your own inbox', async () => {
+  await assertSucceeds(getDocs(collection(db('alice'), 'feeds', 'alice', 'items')));
+  await assertFails(getDocs(collection(db('carol'), 'feeds', 'alice', 'items')));
+});
+
+console.log('Who can hear what');
+await test('global memos: anyone signed in', async () => {
+  await assertSucceeds(getDoc(doc(db('carol'), 'memos', 'm-global')));
+});
+await test('followers-only memos: followers it was delivered to', async () => {
+  await assertSucceeds(getDoc(doc(db('alice'), 'memos', 'm-followers')));
+  await assertFails(getDoc(doc(db('carol'), 'memos', 'm-followers')));
+});
+await test('close friends memos: only people on the list', async () => {
+  await assertSucceeds(getDoc(doc(db('carol'), 'memos', 'm-close')));
+  await assertFails(getDoc(doc(db('alice'), 'memos', 'm-close')));
+});
+await test('the feed queries the app makes are allowed', async () => {
+  const d = db('carol');
+  await assertSucceeds(getDocs(query(collection(d, 'memos'), where('audience', '==', 'global'), orderBy('createdAt', 'desc'))));
+  await assertSucceeds(getDocs(query(collection(d, 'memos'), where('authorId', '==', 'carol'), orderBy('createdAt', 'desc'))));
+});
+await test('listing all memos is not allowed', async () => {
+  await assertFails(getDocs(collection(db('carol'), 'memos')));
+});
+
+console.log('Likes');
+function like(uid, memoId, delta) {
+  const d = db(uid);
+  const b = writeBatch(d);
+  const likeRef = doc(d, 'memos', memoId, 'likes', uid);
+  if (delta > 0) b.set(likeRef, { createdAt: serverTimestamp() }); else b.delete(likeRef);
+  b.update(doc(d, 'memos', memoId), { likeCount: increment(delta) });
+  return b.commit();
+}
+await test('alice can like and unlike a memo she can hear', async () => {
+  await assertSucceeds(like('alice', 'm-followers', 1));
+  await assertSucceeds(like('alice', 'm-followers', -1));
+});
+await test('nobody can like the same memo twice', async () => {
+  await assertSucceeds(like('carol', 'm-global', 1));
+  await assertFails(like('carol', 'm-global', 1));
+});
+await test('like counts cannot be inflated', async () => {
+  await assertFails(updateDoc(doc(db('alice'), 'memos', 'm-global'), { likeCount: 1000 }));
+});
+await test('you cannot like a memo you cannot hear', async () => {
+  await assertFails(like('alice', 'm-close', 1));
+});
+await test('only the author can edit or delete a memo', async () => {
+  await assertFails(updateDoc(doc(db('alice'), 'memos', 'm-global'), { caption: 'hacked' }));
+  await assertFails(deleteDoc(doc(db('alice'), 'memos', 'm-global')));
+});
+
+console.log('Audio files');
+await test('bob can upload audio for his memos', async () => {
+  for (const id of ['m-followers', 'm-close', 'm-global']) {
+    await assertSucceeds(uploadBytes(ref(st('bob'), `audio/bob/${id}`), audio, { contentType: 'audio/mp4' }));
+  }
+});
+await test('you cannot upload into someone else’s folder or upload non-audio', async () => {
+  await assertFails(uploadBytes(ref(st('alice'), 'audio/bob/evil'), audio, { contentType: 'audio/mp4' }));
+  await assertFails(uploadBytes(ref(st('bob'), 'audio/bob/notes'), audio, { contentType: 'text/plain' }));
+});
+await test('listening follows the same rules as the memo', async () => {
+  await assertSucceeds(getBytes(ref(st('carol'), 'audio/bob/m-global')));
+  await assertSucceeds(getBytes(ref(st('alice'), 'audio/bob/m-followers')));
+  await assertFails(getBytes(ref(st('carol'), 'audio/bob/m-followers')));
+  await assertSucceeds(getBytes(ref(st('carol'), 'audio/bob/m-close')));
+  await assertFails(getBytes(ref(st('alice'), 'audio/bob/m-close')));
+});
+
+console.log('Leaving');
+await test('bob can remove alice as a follower', async () => {
+  await assertSucceeds(deleteDoc(doc(db('bob'), 'follows', 'alice_bob')));
+});
+await test('the author can delete a memo', async () => {
+  await assertSucceeds(deleteDoc(doc(db('bob'), 'memos', 'm-followers')));
+});
+
+await env.cleanup();
+console.log(`\n${passed} passed${process.exitCode ? ', some failed' : ''}`);
+assert.ok(!process.exitCode);

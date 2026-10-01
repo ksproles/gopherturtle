@@ -1,0 +1,113 @@
+rules_version = '2';
+
+// Who can read and write what in Gopher Turtle.
+// The data model is described at the top of www/backend-firebase.js.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function validHandle(h) { return h is string && h.matches('^[a-z0-9_]{3,20}$'); }
+    function validName(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+
+    // Public profiles.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'handle', 'color', 'createdAt'])
+        && validName(request.resource.data.name)
+        && request.resource.data.nameLower == request.resource.data.name.lower()
+        && validHandle(request.resource.data.handle)
+        && getAfter(/databases/$(database)/documents/handles/$(request.resource.data.handle)).data.uid == uid
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && me() == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'nameLower', 'color'])
+        && validName(request.resource.data.name)
+        && request.resource.data.nameLower == request.resource.data.name.lower();
+      allow delete: if signedIn() && me() == uid;
+
+      // Private data such as the close friends list: only the owner, ever.
+      match /private/{docId} {
+        allow read, write: if signedIn() && me() == uid;
+      }
+    }
+
+    // Handle reservations keep @handles unique.
+    match /handles/{handle} {
+      allow get: if true;
+      allow create: if signedIn() && validHandle(handle)
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == me()
+        && getAfter(/databases/$(database)/documents/users/$(me())).data.handle == handle;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // follower_target. You can unfollow, or remove one of your followers.
+    match /follows/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['follower', 'target', 'createdAt'])
+        && request.resource.data.follower == me()
+        && request.resource.data.target != me()
+        && id == me() + '_' + request.resource.data.target
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.target));
+      allow delete: if signedIn() && (resource.data.follower == me() || resource.data.target == me());
+    }
+
+    match /memos/{memoId} {
+      // Global memos are open to everyone signed in. Followers-only and close friends
+      // memos are readable only by people they were delivered to (see feeds below).
+      function canRead() {
+        return resource.data.authorId == me()
+          || resource.data.audience == 'global'
+          || exists(/databases/$(database)/documents/feeds/$(me())/items/$(memoId));
+      }
+      function likePath() { return /databases/$(database)/documents/memos/$(memoId)/likes/$(me()); }
+
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['authorId', 'audience', 'createdAt', 'duration', 'caption', 'peaks', 'audioPath', 'likeCount'])
+        && request.resource.data.authorId == me()
+        && request.resource.data.audience in ['close', 'followers', 'global']
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.duration is number && request.resource.data.duration > 0 && request.resource.data.duration <= 305
+        && request.resource.data.caption is string && request.resource.data.caption.size() <= 120
+        && request.resource.data.peaks is list && request.resource.data.peaks.size() <= 64
+        && request.resource.data.audioPath == 'audio/' + me() + '/' + memoId
+        && request.resource.data.likeCount == 0;
+      // The only change anyone can make is a like or unlike, paired with their like doc.
+      allow update: if signedIn() && canRead()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+        && ((request.resource.data.likeCount == resource.data.likeCount + 1
+              && !exists(likePath()) && existsAfter(likePath()))
+          || (request.resource.data.likeCount == resource.data.likeCount - 1
+              && exists(likePath()) && !existsAfter(likePath())));
+      allow delete: if signedIn() && resource.data.authorId == me();
+
+      match /likes/{uid} {
+        allow get: if signedIn() && uid == me();
+        allow create: if signedIn() && uid == me()
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && getAfter(/databases/$(database)/documents/memos/$(memoId)).data.likeCount == get(/databases/$(database)/documents/memos/$(memoId)).data.likeCount + 1;
+        allow delete: if signedIn() && uid == me()
+          && getAfter(/databases/$(database)/documents/memos/$(memoId)).data.likeCount == get(/databases/$(database)/documents/memos/$(memoId)).data.likeCount - 1;
+      }
+    }
+
+    // Each person's inbox of followers-only and close friends memos.
+    // An author can deliver a memo only to their followers (followers-only)
+    // or to people on their own private close friends list (close friends).
+    match /feeds/{owner}/items/{memoId} {
+      allow read: if signedIn() && me() == owner;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['authorId', 'audience', 'createdAt'])
+        && request.resource.data.authorId == me()
+        && get(/databases/$(database)/documents/memos/$(memoId)).data.authorId == me()
+        && get(/databases/$(database)/documents/memos/$(memoId)).data.audience == request.resource.data.audience
+        && ((request.resource.data.audience == 'followers'
+              && exists(/databases/$(database)/documents/follows/$(owner + '_' + me())))
+          || (request.resource.data.audience == 'close'
+              && owner in get(/databases/$(database)/documents/users/$(me())/private/closeFriends).data.uids));
+      allow delete: if signedIn() && (me() == owner || resource.data.authorId == me());
+    }
+  }
+}
