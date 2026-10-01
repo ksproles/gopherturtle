@@ -1,0 +1,7 @@
+{
+  "appId": "com.gopherturtle.app",
+  "appName": "Gopher Turtle",
+  "webDir": "www",
+  "ios": { "contentInset": "never" },
+  "android": { "allowMixedContent": false }
+}

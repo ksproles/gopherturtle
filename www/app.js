@@ -10,7 +10,9 @@
     followers: { label: 'Followers only', feedLabel: 'Following' },
     global: { label: 'Global', feedLabel: 'Global' },
   };
-  const MAX_SECONDS = 60;
+  const MAX_SECONDS = 5 * 60;
+  const SPEEDS = [1, 1.25, 1.5, 2];
+  const HOLD_MS = 450;
   const BARS = 44;
 
   const ME = { id: 'me', name: 'You', handle: 'you', color: '#2f6b4f' };
@@ -54,13 +56,31 @@
     peaks: seededPeaks(i + 1),
   }));
 
+  // ---------- Local preferences ----------
+  const prefs = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem('gt.' + key); return v == null ? fallback : JSON.parse(v); }
+      catch (e) { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem('gt.' + key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ }
+    },
+  };
+
   // ---------- State ----------
   const state = {
     memos: [...SEED],
     filter: null,      // null = everything, newest first
     screen: 'home',
     query: '',
+    // Your close friends list. Private: it lives only with you and never appears on your profile.
+    closeIds: new Set(prefs.get('closeFriends', PEOPLE.filter(p => p.rel === 'close').map(p => p.id))),
+    rate: SPEEDS.includes(prefs.get('rate', 1)) ? prefs.get('rate', 1) : 1,
   };
+  function relationOf(p) {
+    if (state.closeIds.has(p.id)) return 'close';
+    return p.rel ? 'followers' : null;
+  }
 
   // ---------- Elements ----------
   const $ = sel => document.querySelector(sel);
@@ -163,8 +183,9 @@
         </div>
         ${m.caption ? `<p class="memo-caption">${esc(m.caption)}</p>` : ''}
         <div class="player">
-          <button class="play-btn" data-act="play" aria-label="Play memo from ${esc(u.name)}">${ICON_PLAY}</button>
+          <button class="play-btn" data-act="play" aria-label="Play memo from ${esc(u.name)}. Press and hold for playback speed.">${ICON_PLAY}</button>
           <div class="wave" data-act="seek" role="presentation">${bars}</div>
+          ${state.rate !== 1 ? `<span class="speed-tag">${state.rate}×</span>` : ''}
           <span class="dur">${fmtDur(m.duration)}</span>
         </div>
         <div class="memo-actions">
@@ -213,8 +234,8 @@
           <div class="memo-name">${esc(p.name)}</div>
           <div class="memo-meta">@${esc(p.handle)}</div>
         </div>
-        ${p.rel
-          ? `<span class="rel" data-aud="${p.rel}">${p.rel === 'close' ? 'Close friend' : 'Following'}</span>`
+        ${relationOf(p)
+          ? `<span class="rel" data-aud="${relationOf(p)}">${relationOf(p) === 'close' ? 'Close friend' : 'Following'}</span>`
           : `<span class="rel none">Not following</span>`}
       </li>`).join('') : '<li class="empty">No people match.</li>';
 
@@ -231,9 +252,11 @@
     $('#profile-avatar').textContent = initials(ME.name);
     $('#profile-name').textContent = ME.name;
     $('#profile-handle').textContent = '@' + ME.handle;
-    const mine = sorted(state.memos.filter(m => m.userId === ME.id));
+    // Your profile is what other people see, so close friends memos stay off it.
+    const mine = sorted(state.memos.filter(m => m.userId === ME.id && m.audience !== 'close'));
     $('#stat-memos').textContent = mine.length;
-    renderList($('#my-feed'), mine, 'You haven’t posted yet. Tap Post to record your first memo.');
+    $('#cf-count').textContent = state.closeIds.size;
+    renderList($('#my-feed'), mine, 'Memos you post to followers or Global show up here.');
   }
 
   function render() {
@@ -277,7 +300,7 @@
       bars.forEach((b, i) => b.classList.toggle('on', i < lit));
       const m = state.memos.find(x => x.id === id);
       card.querySelector('.dur').textContent = frac > 0 && m
-        ? fmtDur(m.duration * (1 - frac))
+        ? fmtDur(m.duration * (1 - frac) / state.rate)
         : fmtDur(m ? m.duration : 0);
     });
   }
@@ -315,6 +338,7 @@
         });
         audio.currentTime = seekFrac * (isFinite(audio.duration) ? audio.duration : m.duration);
       }
+      audio.playbackRate = state.rate;
       await audio.play();
     } catch (e) {
       toast('Couldn’t play this memo.');
@@ -601,6 +625,116 @@
     toast('Posted to ' + AUDIENCES[memo.audience].label.toLowerCase());
   }
 
+  // ---------- Close friends list ----------
+  const cfSheet = $('#cf-sheet');
+  const CHECK = '<svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>';
+  function openCloseFriends() {
+    // Anyone you follow or who follows you can be a close friend.
+    const people = PEOPLE.filter(p => p.rel || state.closeIds.has(p.id));
+    $('#cf-list').innerHTML = people.map(p => `
+      <li>
+        <label class="cf-item">
+          <div class="avatar" style="--av:${p.color}">${esc(initials(p.name))}</div>
+          <div class="memo-who">
+            <div class="memo-name">${esc(p.name)}</div>
+            <div class="memo-meta">@${esc(p.handle)}</div>
+          </div>
+          <input type="checkbox" id="cf-${p.id}" value="${p.id}" ${state.closeIds.has(p.id) ? 'checked' : ''}>
+          <span class="cf-check">${CHECK}</span>
+        </label>
+      </li>`).join('');
+    cfSheet.hidden = false;
+    backdrop.hidden = false;
+  }
+  function closeCloseFriends() {
+    cfSheet.hidden = true;
+    if (sheet.hidden) backdrop.hidden = true;
+    render();
+  }
+  $('#cf-open').addEventListener('click', openCloseFriends);
+  $('#cf-done').addEventListener('click', closeCloseFriends);
+  $('#cf-list').addEventListener('change', e => {
+    const id = e.target.value;
+    if (e.target.checked) state.closeIds.add(id); else state.closeIds.delete(id);
+    prefs.set('closeFriends', [...state.closeIds]);
+  });
+
+  // ---------- Playback speed (press and hold a play button) ----------
+  const speedMenu = $('#speed-menu');
+  const hold = { timer: 0, fired: false };
+
+  function openSpeedMenu(btn) {
+    speedMenu.querySelectorAll('button').forEach(b =>
+      b.setAttribute('aria-checked', String(+b.dataset.rate === state.rate)));
+    speedMenu.hidden = false;
+    const a = app.getBoundingClientRect();
+    const r = btn.getBoundingClientRect();
+    const w = speedMenu.offsetWidth, h = speedMenu.offsetHeight;
+    const left = Math.min(Math.max(8, r.left - a.left - 4), a.width - w - 8);
+    let top = r.top - a.top - h - 10;
+    if (top < 8) top = r.bottom - a.top + 10;
+    speedMenu.style.left = left + 'px';
+    speedMenu.style.top = top + 'px';
+    if (navigator.vibrate) navigator.vibrate(10);
+    speedMenu.querySelector('[aria-checked="true"]').focus({ preventScroll: true });
+  }
+  function closeSpeedMenu() { speedMenu.hidden = true; }
+  function setRate(rate) {
+    state.rate = rate;
+    prefs.set('rate', rate);
+    audio.defaultPlaybackRate = rate;
+    audio.playbackRate = rate;
+    closeSpeedMenu();
+    render();
+    toast(rate === 1 ? 'Normal speed' : `Playing at ${rate}×`);
+  }
+  speedMenu.addEventListener('click', e => {
+    const b = e.target.closest('[data-rate]');
+    if (b) setRate(+b.dataset.rate);
+  });
+  speedMenu.addEventListener('keydown', e => {
+    const items = [...speedMenu.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+
+  const screensEl = document.querySelector('.screens');
+  function endHold() {
+    clearTimeout(hold.timer);
+    hold.start = null;
+    document.querySelectorAll('.play-btn.is-holding').forEach(b => b.classList.remove('is-holding'));
+  }
+  screensEl.addEventListener('pointerdown', e => {
+    const btn = e.target.closest('.play-btn');
+    if (!btn || e.button > 0) return;
+    hold.fired = false;
+    hold.start = { x: e.clientX, y: e.clientY };
+    btn.classList.add('is-holding');
+    hold.timer = setTimeout(() => {
+      hold.fired = true;
+      btn.classList.remove('is-holding');
+      openSpeedMenu(btn);
+    }, HOLD_MS);
+  });
+  ['pointerup', 'pointercancel'].forEach(t => screensEl.addEventListener(t, endHold));
+  screensEl.addEventListener('pointermove', e => {
+    if (hold.start && Math.hypot(e.clientX - hold.start.x, e.clientY - hold.start.y) > 10) endHold();
+  });
+  screensEl.addEventListener('scroll', () => { endHold(); closeSpeedMenu(); }, true);
+  // Right-click on desktop, and the long-press gesture on some phones, also opens the menu.
+  screensEl.addEventListener('contextmenu', e => {
+    const btn = e.target.closest('.play-btn');
+    if (!btn) return;
+    e.preventDefault();
+    endHold();
+    hold.fired = true;
+    openSpeedMenu(btn);
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!speedMenu.hidden && !speedMenu.contains(e.target) && !e.target.closest('.play-btn')) closeSpeedMenu();
+  });
+
   // ---------- Events ----------
   $('#filters').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
@@ -628,7 +762,10 @@
     const m = card && state.memos.find(x => x.id === card.dataset.id);
     if (!m) return;
     const act = btn.dataset.act;
-    if (act === 'play') togglePlay(m);
+    if (act === 'play') {
+      if (hold.fired) { hold.fired = false; return; }
+      togglePlay(m);
+    }
     if (act === 'seek') {
       const rect = btn.getBoundingClientRect();
       togglePlay(m, Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)));
@@ -662,8 +799,13 @@
   $('#audience').addEventListener('change', syncAudienceColor);
   $('#post-submit').addEventListener('click', submitPost);
   $('#sheet-cancel').addEventListener('click', closeSheet);
-  backdrop.addEventListener('click', closeSheet);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
+  backdrop.addEventListener('click', () => { if (!cfSheet.hidden) closeCloseFriends(); else closeSheet(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!speedMenu.hidden) closeSpeedMenu();
+    else if (!cfSheet.hidden) closeCloseFriends();
+    else if (!sheet.hidden) closeSheet();
+  });
 
   // ---------- Boot ----------
   render();
@@ -674,5 +816,5 @@
     render();
   });
   // Refresh the "5m ago" labels once a minute.
-  setInterval(() => { if (!sheet.hidden) return; render(); }, 60 * 1000);
+  setInterval(() => { if (!sheet.hidden || !cfSheet.hidden || !speedMenu.hidden) return; render(); }, 60 * 1000);
 })();

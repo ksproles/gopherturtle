@@ -7,9 +7,7 @@
   <title>Gopher Turtle</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="fonts/fonts.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -62,8 +60,15 @@
         <div><dt>Memos</dt><dd id="stat-memos">0</dd></div>
         <div><dt>Followers</dt><dd>248</dd></div>
         <div><dt>Following</dt><dd>131</dd></div>
-        <div><dt>Close friends</dt><dd>12</dd></div>
       </dl>
+      <button class="private-row" id="cf-open" data-aud="close">
+        <span class="private-dot"></span>
+        <span class="private-text">
+          <span class="private-title">Close friends list</span>
+          <span class="private-sub"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Only you can see this list · <span id="cf-count">0</span> people</span>
+        </span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
       <h2 class="section-title">Your memos</h2>
       <ol class="feed" id="my-feed"></ol>
     </section>
@@ -106,7 +111,7 @@
     <div class="rec-stage">
       <canvas id="rec-wave" class="rec-wave" width="680" height="160" aria-hidden="true"></canvas>
       <p class="rec-timer" id="rec-timer">0:00</p>
-      <p class="rec-limit">up to 1:00</p>
+      <p class="rec-limit">up to 5:00</p>
     </div>
 
     <div class="rec-controls">
@@ -138,6 +143,29 @@
       <button class="primary-btn" id="post-submit">Post</button>
     </div>
   </section>
+
+  <!-- Close friends list (private) -->
+  <section class="sheet" id="cf-sheet" role="dialog" aria-modal="true" aria-labelledby="cf-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <span class="sheet-spacer"></span>
+      <h2 id="cf-title">Close friends</h2>
+      <button class="text-btn text-btn-end" id="cf-done">Done</button>
+    </header>
+    <p class="cf-note">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      Only you can see this list. Nobody is told when you add or remove them. Memos you post to Close friends go only to these people.
+    </p>
+    <ul class="cf-list" id="cf-list"></ul>
+  </section>
+
+  <!-- Playback speed menu (hold the play button) -->
+  <div class="speed-menu" id="speed-menu" role="menu" aria-label="Playback speed" hidden>
+    <button role="menuitemradio" data-rate="1">1×</button>
+    <button role="menuitemradio" data-rate="1.25">1.25×</button>
+    <button role="menuitemradio" data-rate="1.5">1.5×</button>
+    <button role="menuitemradio" data-rate="2">2×</button>
+  </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>

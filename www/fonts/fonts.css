@@ -1,0 +1,15 @@
+/* Bundled so the app looks right offline (latin subset, variable weight). */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url(bricolage-grotesque.woff2) format("woff2");
+}
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url(figtree.woff2) format("woff2");
+}
