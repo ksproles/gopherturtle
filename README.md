@@ -24,6 +24,10 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Close friends are private.** Your close friends list is only visible to you. You edit it from your profile, nobody is told when they're added or removed, and the list and its size never appear on your profile. Memos you post to close friends also stay off your profile.
 
+**Comments**: tap the speech bubble on any memo to read and write text comments (up to 280 characters). You can delete your own comments, and comments on your own memos.
+
+**Report and block**: tap ••• on a memo or comment to report it (spam, harassment, hate speech, sexual content, violence, self-harm, or something else) or block the person. Blocked people can't follow you, comment on your memos or send you memos, and you won't see their memos or comments. They aren't told. Manage your list under Profile → Blocked people. A basic word filter also masks strong profanity and slurs in captions and comments (`www/text-filter.js`).
+
 **Search**: find people, follow or unfollow them, and search memo captions.
 
 **Profile**: your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
@@ -89,13 +93,23 @@ The rules in `firestore.rules` and `storage.rules` run on Google's servers, so t
 - **Followers-only memos** can only be delivered to people who actually follow you.
 - **Audio files** can only be downloaded by people allowed to hear that memo.
 - Likes can only go up or down by one per person, and only the author can edit or delete a memo.
+- Only people who can hear a memo can read or write its comments. Blocked people can't comment on your memos, follow you, or deliver memos to you.
+- Reports can be filed by anyone signed in, but can't be read from the app.
+
+### Reviewing reports
+
+Apple expects you to act on reports within 24 hours. Reports appear in **Firebase console → Firestore Database → Data → reports**. Each one has the reporter, what was reported (`type`: memo, comment or user, plus `targetId` and `memoId`), the reported person (`targetAuthorId`), the `reason`, and a copy of the caption or comment `text`. To remove reported content, delete the memo (`memos/{memoId}`) or comment (`memos/{memoId}/comments/{targetId}`), then change the report's `status` to `closed`. To ban someone, disable their account under **Authentication → Users**.
+
+### Updating the rules after a change
+
+Changes to `firestore.rules` or `storage.rules` don't reach Firebase on their own. Either paste the file's contents into the **Rules** tab in the Firebase console and click **Publish**, or run `npx firebase deploy --only firestore,storage` from your computer.
 
 ### Testing locally without a Firebase project
 
 ```sh
 npm run emulators                 # local Auth, Firestore and Storage
 # open http://127.0.0.1:5000/?emulators
-npm run test:rules                # 35 checks of who can read and write what
+npm run test:rules                # 50 checks of who can read and write what
 ```
 
 ### Known limits (fine to launch with, worth improving later)
@@ -124,7 +138,7 @@ Before it can go live:
 
 - ~~A backend~~: done (Firebase, see above). Turn it on before submitting.
 - ~~Account deletion from inside the app~~ (Guideline 5.1.1): done, under Profile → Delete account.
-- **Apple's rules for social apps.** Because people post their own content, Apple requires a way to report memos, block users, and filter objectionable content, plus a published contact method (App Review Guideline 1.2).
+- ~~Report, block and filtering~~ (Guideline 1.2): done. Apple also wants a published way to contact you (an email on your App Store listing or website is enough) and reports handled within 24 hours.
 - **A privacy policy** URL, and the App Privacy answers in App Store Connect (you collect audio, email and profile info).
 
 ## Notes

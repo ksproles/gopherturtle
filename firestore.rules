@@ -8,6 +8,8 @@ service cloud.firestore {
     function me() { return request.auth.uid; }
     function validHandle(h) { return h is string && h.matches('^[a-z0-9_]{3,20}$'); }
     function validName(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+    // True when `owner` has blocked the signed-in user.
+    function blockedBy(owner) { return exists(/databases/$(database)/documents/users/$(owner)/blocked/$(me())); }
 
     // Public profiles.
     match /users/{uid} {
@@ -29,6 +31,13 @@ service cloud.firestore {
       match /private/{docId} {
         allow read, write: if signedIn() && me() == uid;
       }
+
+      // People you've blocked. Only you can see or change this list.
+      match /blocked/{otherUid} {
+        allow read, delete: if signedIn() && me() == uid;
+        allow create: if signedIn() && me() == uid && otherUid != uid
+          && request.resource.data.keys().hasOnly(['createdAt']);
+      }
     }
 
     // Handle reservations keep @handles unique.
@@ -49,7 +58,8 @@ service cloud.firestore {
         && request.resource.data.follower == me()
         && request.resource.data.target != me()
         && id == me() + '_' + request.resource.data.target
-        && exists(/databases/$(database)/documents/users/$(request.resource.data.target));
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.target))
+        && !blockedBy(request.resource.data.target);
       allow delete: if signedIn() && (resource.data.follower == me() || resource.data.target == me());
     }
 
@@ -83,6 +93,25 @@ service cloud.firestore {
               && exists(likePath()) && !existsAfter(likePath())));
       allow delete: if signedIn() && resource.data.authorId == me();
 
+      // Text comments. Anyone who can hear the memo can comment, unless the
+      // memo's author has blocked them. Comment authors and memo authors can delete.
+      match /comments/{commentId} {
+        function memo() { return get(/databases/$(database)/documents/memos/$(memoId)).data; }
+        function canReadMemo() {
+          return memo().authorId == me() || memo().audience == 'global'
+            || exists(/databases/$(database)/documents/feeds/$(me())/items/$(memoId));
+        }
+        allow read: if signedIn() && canReadMemo();
+        allow create: if signedIn() && canReadMemo()
+          && !blockedBy(memo().authorId)
+          && request.resource.data.keys().hasOnly(['authorId', 'text', 'createdAt'])
+          && request.resource.data.authorId == me()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 280
+          && request.resource.data.createdAt == request.time;
+        allow delete: if signedIn() && (resource.data.authorId == me() || memo().authorId == me());
+      }
+
       match /likes/{uid} {
         allow get: if signedIn() && uid == me();
         allow create: if signedIn() && uid == me()
@@ -91,6 +120,26 @@ service cloud.firestore {
         allow delete: if signedIn() && uid == me()
           && getAfter(/databases/$(database)/documents/memos/$(memoId)).data.likeCount == get(/databases/$(database)/documents/memos/$(memoId)).data.likeCount - 1;
       }
+    }
+
+    // Lets you find your own comments across all memos (used when deleting your account).
+    match /{path=**}/comments/{commentId} {
+      allow read: if signedIn() && resource.data.authorId == me();
+    }
+
+    // Reports of memos, comments or people. Anyone signed in can file one;
+    // nobody can read them from the app. Review them in the Firebase console.
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['reporterId', 'type', 'targetId', 'targetAuthorId', 'memoId', 'reason', 'text', 'status', 'createdAt'])
+        && request.resource.data.reporterId == me()
+        && request.resource.data.type in ['memo', 'comment', 'user']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetAuthorId is string
+        && request.resource.data.reason in ['spam', 'harassment', 'hate', 'sexual', 'violence', 'self-harm', 'other']
+        && request.resource.data.text is string && request.resource.data.text.size() <= 500
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
     }
 
     // Each person's inbox of followers-only and close friends memos.
@@ -106,7 +155,8 @@ service cloud.firestore {
         && ((request.resource.data.audience == 'followers'
               && exists(/databases/$(database)/documents/follows/$(owner + '_' + me())))
           || (request.resource.data.audience == 'close'
-              && owner in get(/databases/$(database)/documents/users/$(me())/private/closeFriends).data.uids));
+              && owner in get(/databases/$(database)/documents/users/$(me())/private/closeFriends).data.uids))
+        && !blockedBy(owner);
       allow delete: if signedIn() && (me() == owner || resource.data.authorId == me());
     }
   }

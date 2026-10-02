@@ -614,6 +614,86 @@ button { cursor: pointer; }
 .act.act-delete { margin-left: auto; }
 .act.act-delete.confirm { color: var(--rec); }
 
+/* ---------- Comments ---------- */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sheet.sheet-tall { display: flex; flex-direction: column; height: 80%; padding-bottom: 0; overflow: hidden; }
+.comment-list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 8px -20px 0; padding: 4px 20px 12px; display: grid; align-content: start; gap: 14px; }
+.comment { display: flex; gap: 10px; align-items: flex-start; }
+.comment .avatar { width: 34px; height: 34px; font-size: 13px; }
+.comment-body { flex: 1; min-width: 0; }
+.comment-meta { font-size: 13px; color: var(--ink-2); }
+.comment-meta b { color: var(--ink); font-weight: 700; }
+.comment-text { margin: 2px 0 0; overflow-wrap: anywhere; }
+.comment-form {
+  display: flex; gap: 8px; align-items: center;
+  margin: 0 -20px;
+  padding: 10px 20px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.comment-form input {
+  flex: 1; min-width: 0;
+  padding: 11px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 16px;
+}
+.comment-form input:focus { outline: none; border-color: var(--ink); }
+.send-btn { padding: 10px 14px; border: 0; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 700; }
+.send-btn:disabled { opacity: .4; cursor: default; }
+.more-btn {
+  flex: none;
+  display: grid; place-items: center;
+  width: 32px; height: 32px;
+  border: 0; border-radius: 50%;
+  background: none;
+  color: var(--ink-2);
+}
+.more-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.memo-actions .more-btn { margin-left: auto; }
+
+/* ---------- Action menu ---------- */
+.action-backdrop { position: absolute; inset: 0; z-index: 40; background: rgb(10 14 11 / .45); animation: fade .15s ease-out; }
+.action-sheet {
+  position: absolute; inset: auto 8px calc(env(safe-area-inset-bottom, 0px) + 8px) 8px;
+  z-index: 41;
+  display: grid; gap: 8px;
+  animation: rise .2s cubic-bezier(.2, .8, .3, 1);
+}
+.action-group { overflow: hidden; border-radius: 16px; background: var(--surface); }
+.action-title { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13px; text-align: center; }
+.action-title:empty { display: none; }
+.action-item, .action-cancel {
+  display: block; width: 100%;
+  padding: 15px 16px;
+  border: 0;
+  background: var(--surface);
+  font-size: 16px; font-weight: 600;
+  text-align: center;
+}
+.action-item + .action-item { border-top: 1px solid var(--line); }
+.action-item.danger { color: var(--rec); }
+.action-cancel { border-radius: 16px; font-weight: 800; }
+
+/* ---------- Blocked people ---------- */
+.plain-row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  font-weight: 600;
+  text-align: left;
+}
+.plain-row > span:first-child { flex: 1; }
+.plain-row-meta { color: var(--ink-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+.sheet-note { margin: 10px 0 12px; }
+.unblock-btn { flex: none; padding: 7px 12px; border: 1.5px solid var(--line); border-radius: 999px; background: none; font-size: 13px; font-weight: 700; }
+.terms { font-size: 12.5px; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: absolute;

@@ -87,10 +87,26 @@ export function createDemoBackend() {
     peaks: seededPeaks(i + 1),
   }));
   let memos = [...seed];
+  const comments = {
+    'seed-0': [
+      { userId: 'u2', text: 'NO. tell me everything', ago: 3 * MIN },
+      { userId: 'u3', text: 'the suspense 😭', ago: 2 * MIN },
+    ],
+    'seed-1': [
+      { userId: 'u5', text: 'The last one sounds like a marsh wren to me', ago: 12 * MIN },
+      { userId: 'u8', text: 'This is so peaceful, thank you', ago: 9 * MIN },
+      { userId: 'u4', text: 'Agree with Ruth, marsh wren', ago: 4 * MIN },
+    ],
+    'seed-4': [{ userId: 'u1', text: 'Day 40 and already this good??', ago: 2 * 60 * MIN }],
+  };
+  Object.entries(comments).forEach(([memoId, list]) => {
+    comments[memoId] = list.map((c, i) => ({ id: `${memoId}-c${i}`, memoId, userId: c.userId, text: c.text, createdAt: now - c.ago }));
+  });
+  let blocked = new Set(prefs.get('blocked', []));
   let mineLoaded = false;
 
-  const withAuthor = m => ({ ...m, author: byId[m.userId] || me });
-  const relation = p => ({ ...p, following: following.has(p.id), close: closeIds.has(p.id) });
+  const withAuthor = m => ({ ...m, author: byId[m.userId] || me, comments: (comments[m.id] || []).length });
+  const relation = p => ({ ...p, following: following.has(p.id), close: closeIds.has(p.id), blocked: blocked.has(p.id) });
 
   return {
     mode: 'demo',
@@ -110,6 +126,7 @@ export function createDemoBackend() {
       }
       // Followers-only memos only reach you from people you follow.
       return memos
+        .filter(m => !blocked.has(m.userId))
         .filter(m => m.userId === me.id || m.audience !== 'followers' || following.has(m.userId))
         .map(withAuthor);
     },
@@ -152,8 +169,30 @@ export function createDemoBackend() {
     async follow(id) { following.add(id); prefs.set('following', [...following]); },
     async unfollow(id) { following.delete(id); prefs.set('following', [...following]); },
 
+    async listComments(m) {
+      return (comments[m.id] || [])
+        .filter(c => !blocked.has(c.userId))
+        .map(c => ({ ...c, author: byId[c.userId] || me }));
+    },
+    async addComment(m, text) {
+      const c = { id: 'c-' + Date.now(), memoId: m.id, userId: me.id, text, createdAt: Date.now() };
+      (comments[m.id] = comments[m.id] || []).push(c);
+      return { ...c, author: me };
+    },
+    async deleteComment(m, c) {
+      comments[m.id] = (comments[m.id] || []).filter(x => x.id !== c.id);
+    },
+    async report() { /* demo mode: nothing is sent */ },
+    async block(id) {
+      blocked.add(id); prefs.set('blocked', [...blocked]);
+      following.delete(id); prefs.set('following', [...following]);
+      if (closeIds.delete(id)) prefs.set('closeFriends', [...closeIds]);
+    },
+    async unblock(id) { blocked.delete(id); prefs.set('blocked', [...blocked]); },
+    async getBlocked() { return people.filter(p => blocked.has(p.id)); },
+
     async closeFriendCandidates() {
-      return people.filter(p => following.has(p.id) || p.followsMe || closeIds.has(p.id)).map(relation);
+      return people.filter(p => !blocked.has(p.id) && (following.has(p.id) || p.followsMe || closeIds.has(p.id))).map(relation);
     },
     async getCloseFriends() { return new Set(closeIds); },
     async setCloseFriends(ids) { closeIds = new Set(ids); prefs.set('closeFriends', [...closeIds]); },

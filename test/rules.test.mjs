@@ -8,6 +8,7 @@ import {
   writeBatch, serverTimestamp, increment,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getBytes } from 'firebase/storage';
+import { addDoc, collectionGroup } from 'firebase/firestore';
 
 const env = await initializeTestEnvironment({
   projectId: 'demo-gopherturtle',
@@ -190,6 +191,79 @@ await test('listening follows the same rules as the memo', async () => {
   await assertFails(getBytes(ref(st('carol'), 'audio/bob/m-followers')));
   await assertSucceeds(getBytes(ref(st('carol'), 'audio/bob/m-close')));
   await assertFails(getBytes(ref(st('alice'), 'audio/bob/m-close')));
+});
+
+console.log('Comments');
+const comment = (uid, text = 'nice one') => ({ authorId: uid, text, createdAt: serverTimestamp() });
+await test('anyone who can hear a memo can comment on it', async () => {
+  await assertSucceeds(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c1'), comment('carol')));
+  await assertSucceeds(setDoc(doc(db('alice'), 'memos', 'm-followers', 'comments', 'c2'), comment('alice')));
+});
+await test('you cannot comment on a memo you cannot hear', async () => {
+  await assertFails(setDoc(doc(db('carol'), 'memos', 'm-followers', 'comments', 'c3'), comment('carol')));
+});
+await test('you cannot read comments on a memo you cannot hear', async () => {
+  await assertFails(getDocs(collection(db('carol'), 'memos', 'm-followers', 'comments')));
+  await assertSucceeds(getDocs(collection(db('alice'), 'memos', 'm-followers', 'comments')));
+});
+await test('comments must be yours, 1–280 characters', async () => {
+  await assertFails(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c4'), comment('alice')));
+  await assertFails(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c5'), comment('carol', '')));
+  await assertFails(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c6'), comment('carol', 'x'.repeat(281))));
+});
+await test('comments cannot be edited', async () => {
+  await assertFails(updateDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c1'), { text: 'edited' }));
+});
+await test('strangers cannot delete your comment, but the memo’s author can', async () => {
+  await assertFails(deleteDoc(doc(db('alice'), 'memos', 'm-global', 'comments', 'c1')));
+  await assertSucceeds(deleteDoc(doc(db('bob'), 'memos', 'm-global', 'comments', 'c1')));
+  await assertSucceeds(deleteDoc(doc(db('alice'), 'memos', 'm-followers', 'comments', 'c2')));
+});
+await test('you can find only your own comments across memos', async () => {
+  await assertSucceeds(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c7'), comment('carol')));
+  await assertSucceeds(getDocs(query(collectionGroup(db('carol'), 'comments'), where('authorId', '==', 'carol'))));
+  await assertFails(getDocs(query(collectionGroup(db('alice'), 'comments'), where('authorId', '==', 'carol'))));
+});
+
+console.log('Reports');
+const report = (uid, extra = {}) => ({
+  reporterId: uid, type: 'memo', targetId: 'm-global', targetAuthorId: 'bob', memoId: 'm-global',
+  reason: 'spam', text: 'hello', status: 'open', createdAt: serverTimestamp(), ...extra,
+});
+await test('anyone signed in can file a report', async () => {
+  await assertSucceeds(addDoc(collection(db('carol'), 'reports'), report('carol')));
+});
+await test('reports cannot be filed for someone else or with a made-up reason', async () => {
+  await assertFails(addDoc(collection(db('carol'), 'reports'), report('alice')));
+  await assertFails(addDoc(collection(db('carol'), 'reports'), report('carol', { reason: 'boring' })));
+  await assertFails(addDoc(collection(db('carol'), 'reports'), report('carol', { status: 'closed' })));
+});
+await test('nobody can read reports from the app', async () => {
+  await assertFails(getDocs(collection(db('carol'), 'reports')));
+  await assertFails(getDocs(collection(db('bob'), 'reports')));
+});
+
+console.log('Blocking');
+await test('you can block someone and only you can see your block list', async () => {
+  await assertSucceeds(setDoc(doc(db('bob'), 'users', 'bob', 'blocked', 'carol'), { createdAt: serverTimestamp() }));
+  await assertFails(getDocs(collection(db('carol'), 'users', 'bob', 'blocked')));
+  await assertFails(setDoc(doc(db('carol'), 'users', 'bob', 'blocked', 'alice'), { createdAt: serverTimestamp() }));
+});
+await test('blocked people cannot comment on your memos', async () => {
+  await assertFails(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c8'), comment('carol')));
+});
+await test('blocked people cannot follow you', async () => {
+  await assertFails(setDoc(doc(db('carol'), 'follows', 'carol_bob'), { follower: 'carol', target: 'bob', createdAt: serverTimestamp() }));
+});
+await test('blocked people cannot send you memos', async () => {
+  await assertSucceeds(setDoc(doc(db('carol'), 'memos', 'cm'), memoData('carol', 'cm', 'followers')));
+  // Even if Bob still followed Carol, the delivery is refused.
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'follows', 'bob_carol'), { follower: 'bob', target: 'carol' }));
+  await assertFails(setDoc(doc(db('carol'), 'feeds', 'bob', 'items', 'cm'), { authorId: 'carol', audience: 'followers', createdAt: serverTimestamp() }));
+});
+await test('after unblocking, they can comment again', async () => {
+  await assertSucceeds(deleteDoc(doc(db('bob'), 'users', 'bob', 'blocked', 'carol')));
+  await assertSucceeds(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c9'), comment('carol')));
 });
 
 console.log('Leaving');

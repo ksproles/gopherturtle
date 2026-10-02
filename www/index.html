@@ -69,6 +69,11 @@
         </span>
         <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
+      <button class="plain-row" id="blocked-open">
+        <span>Blocked people</span>
+        <span class="plain-row-meta" id="blocked-count"></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
       <h2 class="section-title">Your memos</h2>
       <ol class="feed" id="my-feed"></ol>
 
@@ -169,6 +174,44 @@
     <ul class="cf-list" id="cf-list"></ul>
   </section>
 
+  <!-- Comments -->
+  <section class="sheet sheet-tall" id="comments-sheet" role="dialog" aria-modal="true" aria-labelledby="comments-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <span class="sheet-spacer"></span>
+      <h2 id="comments-title">Comments</h2>
+      <button class="text-btn text-btn-end" id="comments-done">Done</button>
+    </header>
+    <ul class="comment-list" id="comment-list"></ul>
+    <form class="comment-form" id="comment-form" novalidate>
+      <label class="visually-hidden" for="comment-input">Add a comment</label>
+      <input id="comment-input" type="text" maxlength="280" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
+      <button class="send-btn" id="comment-send" type="submit" disabled>Post</button>
+    </form>
+  </section>
+
+  <!-- Blocked people -->
+  <section class="sheet" id="blocked-sheet" role="dialog" aria-modal="true" aria-labelledby="blocked-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <span class="sheet-spacer"></span>
+      <h2 id="blocked-title">Blocked people</h2>
+      <button class="text-btn text-btn-end" id="blocked-done">Done</button>
+    </header>
+    <p class="form-text sheet-note">Blocked people can’t follow you, comment on your memos, or send you memos, and you won’t see their memos or comments. They aren’t told you blocked them.</p>
+    <ul class="people" id="blocked-list"></ul>
+  </section>
+
+  <!-- Action menu (report, block, delete) -->
+  <div class="action-backdrop" id="action-backdrop" hidden></div>
+  <section class="action-sheet" id="action-sheet" role="dialog" aria-modal="true" aria-labelledby="action-title" hidden>
+    <div class="action-group">
+      <p class="action-title" id="action-title"></p>
+      <div id="action-list"></div>
+    </div>
+    <button class="action-cancel" id="action-cancel">Cancel</button>
+  </section>
+
   <!-- Delete account -->
   <section class="sheet" id="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-title" hidden>
     <div class="sheet-grip" aria-hidden="true"></div>
@@ -232,6 +275,7 @@
           <input id="auth-password" type="password" autocomplete="current-password" minlength="6">
         </label>
         <p class="form-text" id="auth-hint" hidden></p>
+        <p class="form-text terms" data-for="signup">By creating an account you agree to the community rules: no harassment, hate, threats, sexual content or spam. Accounts that break them are removed.</p>
         <p class="form-error" id="auth-error" role="alert" hidden></p>
         <button class="primary-btn" id="auth-submit" type="submit">Sign in</button>
         <div class="auth-links">

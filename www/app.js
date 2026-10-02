@@ -5,6 +5,7 @@
  */
 import { BARS, rng, seededPeaks, synthMemo } from './audio-utils.js';
 import { createDemoBackend } from './backend-demo.js';
+import { filterText } from './text-filter.js';
 import { firebaseConfig } from './firebase-config.js';
 
 // ---------- Constants ----------
@@ -82,6 +83,7 @@ function toast(msg) {
 
 // ---------- Rendering ----------
 const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>';
+const ICON_MORE = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>';
 
 function memoHTML(m) {
@@ -99,7 +101,7 @@ function memoHTML(m) {
         </div>
         <span class="aud-badge">${aud.label}</span>
       </div>
-      ${m.caption ? `<p class="memo-caption">${esc(m.caption)}</p>` : ''}
+      ${m.caption ? `<p class="memo-caption">${esc(filterText(m.caption))}</p>` : ''}
       <div class="player">
         <button class="play-btn" data-act="play" aria-label="Play memo from ${esc(u.name)}. Press and hold for playback speed.">${ICON_PLAY}</button>
         <div class="wave" data-act="seek" role="presentation">${bars}</div>
@@ -111,10 +113,14 @@ function memoHTML(m) {
           <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
           <span>${fmtCount(m.likes)}</span>
         </button>
+        <button class="act" data-act="comments" aria-label="Comments">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>
+          <span>${fmtCount(m.comments || 0)}</span>
+        </button>
         ${mine ? `<button class="act act-delete" data-act="delete" aria-label="Delete this memo">
           <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
           <span>Delete</span>
-        </button>` : ''}
+        </button>` : `<button class="more-btn" data-act="more" aria-label="More options for this memo">${ICON_MORE}</button>`}
       </div>
     </li>`;
 }
@@ -162,7 +168,9 @@ async function renderSearch() {
         <div class="memo-name">${esc(p.name)}</div>
         <div class="memo-meta">@${esc(p.handle)}${p.close ? ' · <span class="cf-tag">Close friend</span>' : ''}</div>
       </div>
-      <button class="follow-btn" data-follow="${esc(p.id)}" aria-pressed="${p.following}">${p.following ? 'Following' : 'Follow'}</button>
+      ${p.blocked
+        ? `<button class="unblock-btn" data-unblock="${esc(p.id)}">Unblock</button>`
+        : `<button class="follow-btn" data-follow="${esc(p.id)}" aria-pressed="${p.following}">${p.following ? 'Following' : 'Follow'}</button>`}
     </li>`).join('') : `<li class="empty">${q ? 'No people match.' : 'No one else is here yet.'}</li>`;
 
   const memos = sorted(state.memos.filter(m => {
@@ -184,6 +192,9 @@ function renderProfile() {
   $('#stat-memos').textContent = mine.length;
   $('#cf-count').textContent = `${state.closeCount} ${state.closeCount === 1 ? 'person' : 'people'}`;
   renderList($('#my-feed'), mine, 'Memos you post to followers or Global show up here.');
+  backend.getBlocked().then(list => {
+    $('#blocked-count').textContent = list.length ? String(list.length) : '';
+  }).catch(() => {});
   $('#account').hidden = backend.mode !== 'firebase';
   $('#demo-note').hidden = backend.mode !== 'demo';
   $('#account-email').textContent = backend.email || '';
@@ -671,6 +682,8 @@ document.querySelector('.screens').addEventListener('click', e => {
   }
   if (act === 'like') toggleLike(m);
   if (act === 'delete') confirmDelete(btn, m);
+  if (act === 'comments') openComments(m);
+  if (act === 'more') memoMenu(m);
 });
 
 const paintLike = m => cardsFor(m.id).forEach(c => {
@@ -719,8 +732,18 @@ async function confirmDelete(btn, m) {
   } catch (e) { toast(friendlyError(e)); }
 }
 
-// Follow / unfollow from search.
+// Follow / unfollow / unblock from search.
 $('#people').addEventListener('click', async e => {
+  const unblockBtn = e.target.closest('[data-unblock]');
+  if (unblockBtn) {
+    try {
+      await backend.unblock(unblockBtn.dataset.unblock);
+      toast('Unblocked');
+      renderSearch();
+      refreshFeed();
+    } catch (err) { toast(friendlyError(err)); }
+    return;
+  }
   const btn = e.target.closest('[data-follow]');
   if (!btn) return;
   const id = btn.dataset.follow;
@@ -731,7 +754,9 @@ $('#people').addEventListener('click', async e => {
     btn.setAttribute('aria-pressed', String(on));
     btn.textContent = on ? 'Following' : 'Follow';
     refreshFeed();
-  } catch (err) { toast(friendlyError(err)); }
+  } catch (err) {
+    toast(on && err && err.code === 'permission-denied' ? 'You can’t follow this account.' : friendlyError(err));
+  }
   btn.disabled = false;
 });
 
@@ -753,14 +778,251 @@ $('#sheet-cancel').addEventListener('click', closeSheet);
 backdrop.addEventListener('click', () => {
   if (!cfSheet.hidden) closeCloseFriends();
   else if (!deleteSheet.hidden) closeDeleteSheet();
+  else if (!commentsSheet.hidden) closeComments();
+  else if (!blockedSheet.hidden) closeBlocked();
   else closeSheet();
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!speedMenu.hidden) closeSpeedMenu();
+  else if (!actionSheet.hidden) closeActions(null);
+  else if (!commentsSheet.hidden) closeComments();
+  else if (!blockedSheet.hidden) closeBlocked();
   else if (!cfSheet.hidden) closeCloseFriends();
   else if (!deleteSheet.hidden) closeDeleteSheet();
   else if (!sheet.hidden) closeSheet();
+});
+
+// ---------- Action menu ----------
+const actionSheet = $('#action-sheet');
+const actionBackdrop = $('#action-backdrop');
+let actionResolve = null;
+// Shows a list of choices and resolves with the chosen key, or null on cancel.
+function chooseAction(title, items) {
+  if (actionResolve) actionResolve(null);
+  $('#action-title').textContent = title || '';
+  $('#action-list').innerHTML = items.map(it =>
+    `<button class="action-item${it.danger ? ' danger' : ''}" data-key="${esc(it.key)}">${esc(it.label)}</button>`).join('');
+  actionSheet.hidden = false;
+  actionBackdrop.hidden = false;
+  actionSheet.querySelector('.action-item').focus({ preventScroll: true });
+  return new Promise(resolve => { actionResolve = resolve; });
+}
+function closeActions(value) {
+  actionSheet.hidden = true;
+  actionBackdrop.hidden = true;
+  const r = actionResolve;
+  actionResolve = null;
+  if (r) r(value);
+}
+$('#action-list').addEventListener('click', e => {
+  const b = e.target.closest('[data-key]');
+  if (b) closeActions(b.dataset.key);
+});
+$('#action-cancel').addEventListener('click', () => closeActions(null));
+actionBackdrop.addEventListener('click', () => closeActions(null));
+
+// ---------- Report and block ----------
+const REASONS = [
+  { key: 'spam', label: 'Spam' },
+  { key: 'harassment', label: 'Harassment or bullying' },
+  { key: 'hate', label: 'Hate speech' },
+  { key: 'sexual', label: 'Nudity or sexual content' },
+  { key: 'violence', label: 'Violence or threats' },
+  { key: 'self-harm', label: 'Self-harm or suicide' },
+  { key: 'other', label: 'Something else' },
+];
+
+// target: {type, targetId, targetAuthorId, memoId, text, author}
+async function reportFlow(target) {
+  const what = { memo: 'this memo', comment: 'this comment', user: `@${target.author.handle}` }[target.type];
+  const reason = await chooseAction(`Why are you reporting ${what}?`, REASONS);
+  if (!reason) return;
+  const { author, ...report } = target;
+  try {
+    await backend.report({ ...report, reason });
+  } catch (e) { toast(friendlyError(e)); return; }
+  const next = await chooseAction(
+    `Thanks for reporting. We review every report within 24 hours. Do you also want to block @${author.handle}?`,
+    [{ key: 'block', label: `Block @${author.handle}`, danger: true }, { key: 'no', label: 'Not now' }]);
+  if (next === 'block') await blockUser(author, true);
+  else toast('Report sent');
+}
+
+async function blockUser(user, confirmed) {
+  if (!confirmed) {
+    const ok = await chooseAction(
+      `Block @${user.handle}? They won’t be able to follow you, comment on your memos or send you memos, and you won’t see theirs. They won’t be told.`,
+      [{ key: 'block', label: `Block @${user.handle}`, danger: true }]);
+    if (ok !== 'block') return;
+  }
+  try {
+    await backend.block(user.id);
+  } catch (e) { toast(friendlyError(e)); return; }
+  if (player.memo && player.memo.userId === user.id) stopPlayback();
+  state.memos = state.memos.filter(m => m.userId !== user.id);
+  if (!commentsSheet.hidden && openMemo) {
+    if (openMemo.userId === user.id) closeComments();
+    else loadComments(openMemo);
+  }
+  backend.getCloseFriends().then(ids => { state.closeCount = ids.size; }).catch(() => {});
+  render();
+  toast(`Blocked @${user.handle}`);
+}
+
+async function memoMenu(m) {
+  const key = await chooseAction(`Memo from @${m.author.handle}`, [
+    { key: 'report', label: 'Report memo', danger: true },
+    { key: 'block', label: `Block @${m.author.handle}`, danger: true },
+  ]);
+  if (key === 'report') {
+    reportFlow({ type: 'memo', targetId: m.id, targetAuthorId: m.userId, memoId: m.id, text: m.caption || '', author: m.author });
+  }
+  if (key === 'block') blockUser(m.author);
+}
+
+// ---------- Comments ----------
+const commentsSheet = $('#comments-sheet');
+const commentInput = $('#comment-input');
+let openMemo = null;
+let comments = [];
+
+function commentHTML(c) {
+  const u = c.author;
+  return `
+    <li class="comment" data-cid="${esc(c.id)}">
+      <div class="avatar" style="--av:${esc(u.color)}">${esc(initials(u.name))}</div>
+      <div class="comment-body">
+        <div class="comment-meta"><b>${esc(u.name)}</b> · ${timeAgo(c.createdAt)}</div>
+        <p class="comment-text">${esc(filterText(c.text))}</p>
+      </div>
+      <button class="more-btn" data-cmore="${esc(c.id)}" aria-label="More options for this comment">${ICON_MORE}</button>
+    </li>`;
+}
+function renderComments() {
+  $('#comment-list').innerHTML = comments.length
+    ? comments.map(commentHTML).join('')
+    : '<li class="empty">No comments yet. Be the first.</li>';
+  $('#comments-title').textContent = comments.length === 1 ? '1 comment' : `${comments.length} comments`;
+}
+function setCommentCount(m, n) {
+  m.comments = n;
+  cardsFor(m.id).forEach(c => { c.querySelector('[data-act="comments"] span').textContent = fmtCount(n); });
+}
+async function loadComments(m) {
+  try {
+    const list = await backend.listComments(m);
+    if (openMemo !== m) return;
+    comments = list;
+    renderComments();
+    setCommentCount(m, comments.length);
+  } catch (e) {
+    $('#comment-list').innerHTML = `<li class="empty">${esc(friendlyError(e))}</li>`;
+  }
+}
+function openComments(m) {
+  openMemo = m;
+  comments = [];
+  $('#comment-list').innerHTML = '<li class="empty">Loading…</li>';
+  $('#comments-title').textContent = 'Comments';
+  commentInput.value = '';
+  $('#comment-send').disabled = true;
+  commentsSheet.hidden = false;
+  backdrop.hidden = false;
+  loadComments(m);
+}
+function closeComments() {
+  commentsSheet.hidden = true;
+  backdrop.hidden = true;
+  openMemo = null;
+}
+$('#comments-done').addEventListener('click', closeComments);
+commentInput.addEventListener('input', () => { $('#comment-send').disabled = !commentInput.value.trim(); });
+$('#comment-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const text = commentInput.value.trim();
+  const m = openMemo;
+  if (!text || !m) return;
+  $('#comment-send').disabled = true;
+  try {
+    const c = await backend.addComment(m, text);
+    if (openMemo !== m) return;
+    comments.push(c);
+    commentInput.value = '';
+    renderComments();
+    setCommentCount(m, comments.length);
+    const list = $('#comment-list');
+    list.scrollTop = list.scrollHeight;
+  } catch (err) {
+    toast(err && err.code === 'permission-denied' ? 'You can’t comment on this memo.' : friendlyError(err));
+    $('#comment-send').disabled = false;
+  }
+});
+$('#comment-list').addEventListener('click', async e => {
+  const b = e.target.closest('[data-cmore]');
+  if (!b || !openMemo) return;
+  const m = openMemo;
+  const c = comments.find(x => x.id === b.dataset.cmore);
+  if (!c) return;
+  const mine = c.userId === backend.me.id;
+  const myMemo = m.userId === backend.me.id;
+  const items = [];
+  if (mine || myMemo) items.push({ key: 'delete', label: 'Delete comment', danger: true });
+  if (!mine) {
+    items.push({ key: 'report', label: 'Report comment', danger: true });
+    items.push({ key: 'block', label: `Block @${c.author.handle}`, danger: true });
+  }
+  const key = await chooseAction(mine ? 'Your comment' : `Comment from @${c.author.handle}`, items);
+  if (key === 'delete') {
+    try {
+      await backend.deleteComment(m, c);
+      comments = comments.filter(x => x.id !== c.id);
+      renderComments();
+      setCommentCount(m, comments.length);
+    } catch (err) { toast(friendlyError(err)); }
+  }
+  if (key === 'report') {
+    reportFlow({ type: 'comment', targetId: c.id, targetAuthorId: c.userId, memoId: m.id, text: c.text, author: c.author });
+  }
+  if (key === 'block') blockUser(c.author);
+});
+
+// ---------- Blocked people ----------
+const blockedSheet = $('#blocked-sheet');
+async function openBlocked() {
+  blockedSheet.hidden = false;
+  backdrop.hidden = false;
+  $('#blocked-list').innerHTML = '<li class="empty">Loading…</li>';
+  let list = [];
+  try { list = await backend.getBlocked(); }
+  catch (e) { $('#blocked-list').innerHTML = `<li class="empty">${esc(friendlyError(e))}</li>`; return; }
+  $('#blocked-list').innerHTML = list.length ? list.map(p => `
+    <li class="person">
+      <div class="avatar" style="--av:${esc(p.color)}">${esc(initials(p.name))}</div>
+      <div class="memo-who">
+        <div class="memo-name">${esc(p.name)}</div>
+        <div class="memo-meta">@${esc(p.handle)}</div>
+      </div>
+      <button class="unblock-btn" data-unblock-row="${esc(p.id)}">Unblock</button>
+    </li>`).join('') : '<li class="empty">You haven’t blocked anyone.</li>';
+}
+function closeBlocked() {
+  blockedSheet.hidden = true;
+  backdrop.hidden = true;
+  render();
+}
+$('#blocked-open').addEventListener('click', openBlocked);
+$('#blocked-done').addEventListener('click', closeBlocked);
+$('#blocked-list').addEventListener('click', async e => {
+  const b = e.target.closest('[data-unblock-row]');
+  if (!b) return;
+  b.disabled = true;
+  try {
+    await backend.unblock(b.dataset.unblockRow);
+    b.closest('li').remove();
+    if (!$('#blocked-list li')) $('#blocked-list').innerHTML = '<li class="empty">You haven’t blocked anyone.</li>';
+    refreshFeed();
+  } catch (err) { toast(friendlyError(err)); b.disabled = false; }
 });
 
 // ---------- Account ----------
@@ -887,7 +1149,7 @@ async function refreshFeed() {
     if (seq === feedSeq) toast(friendlyError(e));
   }
   state.loading = false;
-  if (sheet.hidden && cfSheet.hidden) render();
+  if (sheet.hidden && cfSheet.hidden && commentsSheet.hidden) render();
 }
 
 function onSignedIn() {
@@ -911,7 +1173,8 @@ const EMULATOR_CONFIG = {
 async function boot() {
   // Add ?emulators to the URL to use the local Firebase emulators (npm run emulators).
   const emulators = /[?&]emulators\b/.test(location.search);
-  const config = firebaseConfig || (emulators ? EMULATOR_CONFIG : null);
+  // The emulators always use a separate demo project, never your real one.
+const config = emulators ? EMULATOR_CONFIG : firebaseConfig;
   if (config) {
     try {
       const mod = await import('./backend-firebase.js');

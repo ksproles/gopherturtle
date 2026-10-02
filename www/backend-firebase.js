@@ -9,6 +9,9 @@
 //   memos/{memoId}                   {authorId, audience, createdAt, duration, caption, peaks, audioPath, likeCount}
 //   memos/{memoId}/likes/{uid}       {createdAt}
 //   feeds/{uid}/items/{memoId}       {authorId, audience, createdAt}  delivery of followers-only and close friends memos
+//   memos/{memoId}/comments/{id}     {authorId, text, createdAt}
+//   users/{uid}/blocked/{otherUid}   {createdAt}  people you've blocked (owner only)
+//   reports/{id}                     write-only; reviewed in the Firebase console
 //   Storage: audio/{uid}/{memoId}
 import {
   initializeApp,
@@ -16,8 +19,8 @@ import {
   onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, sendPasswordResetEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
   initializeFirestore, connectFirestoreEmulator,
-  collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy, limit,
-  writeBatch, runTransaction, serverTimestamp, increment, getCountFromServer,
+  collection, collectionGroup, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy, limit,
+  addDoc, writeBatch, runTransaction, serverTimestamp, increment, getCountFromServer,
   getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL, deleteObject,
 } from './vendor/firebase.js';
 import { colorFor } from './audio-utils.js';
@@ -64,6 +67,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
   let me = null;              // public profile of the signed-in user
   let following = new Set();  // uids I follow
   let closeIds = new Set();   // my private close friends list
+  let blocked = new Set();    // uids I've blocked
   const users = new Map();    // uid -> profile cache
   const memoCache = new Map();
 
@@ -86,20 +90,23 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     if (!snap.exists()) { me = null; return null; }
     me = { id, ...snap.data() };
     users.set(id, me);
-    const [fs, cf] = await Promise.all([
+    const [fs, cf, bl] = await Promise.all([
       getDocs(query(collection(db, 'follows'), where('follower', '==', id))),
       getDoc(doc(db, 'users', id, 'private', 'closeFriends')),
+      getDocs(collection(db, 'users', id, 'blocked')),
     ]);
     following = new Set(fs.docs.map(d => d.data().target));
+    blocked = new Set(bl.docs.map(d => d.id));
     closeIds = new Set(cf.exists() ? cf.data().uids || [] : []);
     return me;
   }
 
   async function toMemo(snap) {
     const d = snap.data();
-    const [author, likeSnap] = await Promise.all([
+    const [author, likeSnap, commentCount] = await Promise.all([
       getUser(d.authorId),
       getDoc(doc(db, 'memos', snap.id, 'likes', uid())).catch(() => null),
+      getCountFromServer(collection(db, 'memos', snap.id, 'comments')).then(c => c.data().count).catch(() => 0),
     ]);
     const m = {
       id: snap.id,
@@ -112,6 +119,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       peaks: d.peaks || [],
       likes: d.likeCount || 0,
       liked: !!(likeSnap && likeSnap.exists()),
+      comments: commentCount,
       audioPath: d.audioPath,
     };
     memoCache.set(m.id, m);
@@ -204,7 +212,8 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
         .filter(s => !snaps.has(s.id))
         .map(s => getDoc(doc(db, 'memos', s.id)).catch(() => null)));
       delivered.forEach(s => { if (s && s.exists()) snaps.set(s.id, s); });
-      return Promise.all([...snaps.values()].map(toMemo));
+      // Memos from people you've blocked never show up.
+      return Promise.all([...snaps.values()].filter(s => !blocked.has(s.data().authorId)).map(toMemo));
     },
 
     async audioUrl(m) {
@@ -247,6 +256,9 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     async searchPeople(q) {
       q = q.trim().toLowerCase().replace(/^@/, '');
       const usersCol = collection(db, 'users');
+      // Refresh who you follow: someone may have removed you as a follower or blocked you.
+      const fs = await getDocs(query(collection(db, 'follows'), where('follower', '==', uid())));
+      following = new Set(fs.docs.map(d => d.data().target));
       let snaps;
       if (!q) {
         snaps = (await getDocs(query(usersCol, orderBy('createdAt', 'desc'), limit(25)))).docs;
@@ -265,7 +277,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
         .map(s => {
           const u = { id: s.id, ...s.data() };
           users.set(u.id, u);
-          return { ...u, following: following.has(u.id), close: closeIds.has(u.id) };
+          return { ...u, following: following.has(u.id), close: closeIds.has(u.id), blocked: blocked.has(u.id) };
         });
     },
 
@@ -274,13 +286,65 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       following.add(target);
     },
     async unfollow(target) {
-      await deleteDoc(doc(db, 'follows', `${uid()}_${target}`));
+      await deleteDoc(doc(db, 'follows', `${uid()}_${target}`)).catch(e => {
+        // Already gone (for example they removed you as a follower): nothing to undo.
+        if (e.code !== 'permission-denied') throw e;
+      });
       following.delete(target);
+    },
+
+    // ---------- Comments ----------
+    async listComments(m) {
+      const snaps = await getDocs(query(collection(db, 'memos', m.id, 'comments'), orderBy('createdAt', 'asc'), limit(200)));
+      const list = await Promise.all(snaps.docs
+        .filter(s => !blocked.has(s.data().authorId))
+        .map(async s => {
+          const d = s.data();
+          return { id: s.id, memoId: m.id, userId: d.authorId, author: await getUser(d.authorId), text: d.text, createdAt: toMs(d.createdAt) };
+        }));
+      return list;
+    },
+    async addComment(m, text) {
+      const ref_ = await addDoc(collection(db, 'memos', m.id, 'comments'), {
+        authorId: uid(), text, createdAt: serverTimestamp(),
+      });
+      return { id: ref_.id, memoId: m.id, userId: uid(), author: me, text, createdAt: Date.now() };
+    },
+    async deleteComment(m, c) {
+      await deleteDoc(doc(db, 'memos', m.id, 'comments', c.id));
+    },
+
+    // ---------- Reports and blocking ----------
+    async report({ type, targetId, targetAuthorId, memoId = '', reason, text = '' }) {
+      await addDoc(collection(db, 'reports'), {
+        reporterId: uid(), type, targetId, targetAuthorId, memoId, reason,
+        text: String(text).slice(0, 500), status: 'open', createdAt: serverTimestamp(),
+      });
+    },
+    async block(target) {
+      const id = uid();
+      await setDoc(doc(db, 'users', id, 'blocked', target), { createdAt: serverTimestamp() });
+      blocked.add(target);
+      // Blocking also ends follows in both directions and removes them from close friends.
+      await Promise.allSettled([
+        deleteDoc(doc(db, 'follows', `${id}_${target}`)),
+        deleteDoc(doc(db, 'follows', `${target}_${id}`)),
+      ]);
+      following.delete(target);
+      if (closeIds.has(target)) await api.setCloseFriends([...closeIds].filter(x => x !== target));
+    },
+    async unblock(target) {
+      await deleteDoc(doc(db, 'users', uid(), 'blocked', target));
+      blocked.delete(target);
+    },
+    async getBlocked() {
+      const list = await Promise.all([...blocked].map(getUser));
+      return list.sort((a, b) => a.name.localeCompare(b.name));
     },
 
     async closeFriendCandidates() {
       const fs = await getDocs(query(collection(db, 'follows'), where('target', '==', uid())));
-      const ids = new Set([...following, ...closeIds, ...fs.docs.map(d => d.data().follower)]);
+      const ids = new Set([...following, ...closeIds, ...fs.docs.map(d => d.data().follower)].filter(x => !blocked.has(x)));
       const list = await Promise.all([...ids].map(getUser));
       return list
         .filter(u => u.handle !== 'deleted')
@@ -313,6 +377,10 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       ]);
       await Promise.all([...out.docs, ...inc.docs, ...inbox.docs].map(s => deleteDoc(s.ref)));
       await deleteDoc(doc(db, 'users', id, 'private', 'closeFriends'));
+      const myComments = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', id)));
+      await Promise.all(myComments.docs.map(s => deleteDoc(s.ref)));
+      const bl = await getDocs(collection(db, 'users', id, 'blocked'));
+      await Promise.all(bl.docs.map(s => deleteDoc(s.ref)));
       if (me && me.handle) await deleteDoc(doc(db, 'handles', me.handle));
       await deleteDoc(doc(db, 'users', id));
       await deleteUser(user);
