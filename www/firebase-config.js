@@ -1,18 +1,15 @@
-// Firebase project settings.
+// Firebase project settings for Gopher Turtle.
 //
-// Leave `firebaseConfig` as null to run Gopher Turtle in demo mode (example
+// Set `firebaseConfig` to null to run the app in demo mode instead (example
 // people and memos, everything stays on the device).
 //
-// To turn on real accounts and shared memos, paste your web app's config from
-// Firebase console → Project settings → Your apps → SDK setup and configuration.
 // These values are not secret; access is controlled by firestore.rules and
 // storage.rules. See README.md → "Turning on accounts (Firebase)".
-export const firebaseConfig = null;
-// export const firebaseConfig = {
-//   apiKey: '...',
-//   authDomain: 'your-project.firebaseapp.com',
-//   projectId: 'your-project',
-//   storageBucket: 'your-project.firebasestorage.app',
-//   messagingSenderId: '...',
-//   appId: '...',
-// };
+export const firebaseConfig = {
+  apiKey: 'AIzaSyBPDjmRNQ4LpguLt1t6tD_JzoO2A4103Qk',
+  authDomain: 'gopher-turtle.firebaseapp.com',
+  projectId: 'gopher-turtle',
+  storageBucket: 'gopher-turtle.firebasestorage.app',
+  messagingSenderId: '1044077139860',
+  appId: '1:1044077139860:web:c1839b6849b2f178d3a181',
+};
