@@ -2,7 +2,7 @@
   "name": "gopherturtle",
   "version": "1.0.0",
   "private": true,
-  "description": "RiffRaff — scrollable voice memos",
+  "description": "TwoCents — scrollable voice memos",
   "scripts": {
     "serve": "python3 -m http.server 8000 --directory www",
     "sync": "cap sync",

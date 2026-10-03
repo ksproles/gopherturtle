@@ -1,4 +1,4 @@
-// Firebase project settings for RiffRaff.
+// Firebase project settings for TwoCents.
 //
 // Set `firebaseConfig` to null to run the app in demo mode instead (example
 // people and memos, everything stays on the device).

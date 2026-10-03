@@ -1,4 +1,4 @@
-# RiffRaff
+# TwoCents
 
 Scrollable voice memos. Open the app and scroll through memos from your close friends, people you follow, and the world, newest first.
 
@@ -13,7 +13,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 - When a memo finishes, the next one in the list plays automatically.
 - **Playback speed:** press and hold any play button to pick 1×, 1.25×, 1.5× or 2×. The speed applies to every memo and is remembered. Cards show the speed when it isn't 1×.
 
-**Discover**: public (global) memos from everyone, ranked for you. The ranking favors people followed by people you follow, people whose memos you've liked or listened to, popular memos (likes and comments) and recent ones. Memos you've already heard and memos from people you already follow (they're on Home) rank lower. Each card says why it was picked ("Followed by Maya", "Popular on RiffRaff"), and a "People you might like" row suggests accounts to follow. Listening history is kept on the device.
+**Discover**: public (global) memos from everyone, ranked for you. The ranking favors people followed by people you follow, people whose memos you've liked or listened to, popular memos (likes and comments) and recent ones. Memos you've already heard and memos from people you already follow (they're on Home) rank lower. Each card says why it was picked ("Followed by Maya", "Popular on TwoCents"), and a "People you might like" row suggests accounts to follow. Listening history is kept on the device.
 
 **Bottom bar**: Home · Discover · Post · Search · Profile
 
@@ -26,9 +26,9 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Close friends are private.** Your close friends list is only visible to you. You edit it from your profile, nobody is told when they're added or removed, and the list and its size never appear on your profile. Memos you post to close friends also stay off your profile.
 
-**Like, Riff, Amplify**: every memo has **Like** (heart), **Riff** (text replies, up to 280 characters; delete your own, or any riff on your own memo) and, on public memos, **Amplify** (repost to your followers' Home with an "Amplified by …" line). Only public (Global) memos can be amplified, and not your own. Tap Amplify again to undo. Delete your own memos from the ••• menu.
+**Like, Comment, Repost**: every memo has **Like** (heart), **Comment** (text replies, up to 280 characters; delete your own, or any comment on your own memo) and, on public memos, **Repost** (shares it to your followers' Home with a "Reposted by …" line). Only public (Global) memos can be reposted, and not your own. Tap Repost again to undo. (Reposts are stored as `amplifies` in Firestore.) Delete your own memos from the ••• menu.
 
-**Report and block**: tap ••• on a memo or riff to report it (spam, harassment, hate speech, sexual content, violence, self-harm, or something else) or block the person. Blocked people can't follow you, riff on your memos or send you memos, and you won't see their memos or riffs. They aren't told. Manage your list under Profile → Blocked people. A basic word filter also masks strong profanity and slurs in captions and riffs (`www/text-filter.js`).
+**Report and block**: tap ••• on a memo or comment to report it (spam, harassment, hate speech, sexual content, violence, self-harm, or something else) or block the person. Blocked people can't follow you, comment on your memos or send you memos, and you won't see their memos or comments. They aren't told. Manage your list under Profile → Blocked people. A basic word filter also masks strong profanity and slurs in captions and comments (`www/text-filter.js`).
 
 **Follow requests and profiles**: tap anyone's name or avatar to open their profile. Without following, you only hear their public memos. **Follow** sends a request (the button shows **Requested**); they approve or decline it under **Profile → Follow requests** (a red dot on the Profile tab means someone's waiting). Approved followers hear followers-only memos, including older ones; close friends memos need you on their close friends list. Access follows the current relationship, so it ends when someone removes you as a follower or takes you off their list. Unfollowing or canceling a request works from the same button.
 

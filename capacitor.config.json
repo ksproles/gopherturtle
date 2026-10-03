@@ -1,6 +1,6 @@
 {
   "appId": "com.gopherturtle.app",
-  "appName": "RiffRaff",
+  "appName": "TwoCents",
   "webDir": "www",
   "ios": { "contentInset": "never" },
   "android": { "allowMixedContent": false }

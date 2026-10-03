@@ -1,4 +1,4 @@
-/* RiffRaff — scrollable voice memos.
+/* TwoCents — scrollable voice memos.
  * Vanilla JS modules, no build step for the app itself.
  * Data comes from a backend: demo (on-device examples) or Firebase (real accounts),
  * chosen by www/firebase-config.js.
@@ -66,9 +66,9 @@ function onHome(m) {
     || (m.amplifiedBy && m.amplifiedBy.length > 0);
 }
 function amplifiedText(names) {
-  if (names.length === 1) return `Amplified by ${names[0]}`;
-  if (names.length === 2) return `Amplified by ${names[0]} and ${names[1]}`;
-  return `Amplified by ${names[0]} and ${names.length - 1} others`;
+  if (names.length === 1) return `Reposted by ${names[0]}`;
+  if (names.length === 2) return `Reposted by ${names[0]} and ${names[1]}`;
+  return `Reposted by ${names[0]} and ${names.length - 1} others`;
 }
 const feedLabel = $('#feed-label');
 
@@ -137,11 +137,11 @@ function memoHTML(m, reason) {
         </button>
         <button class="act" data-act="comments">
           <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>
-          <span class="act-label">Riff</span><span class="act-count">${fmtCount(m.comments || 0)}</span>
+          <span class="act-label">Comment</span><span class="act-count">${fmtCount(m.comments || 0)}</span>
         </button>
-        ${m.audience === 'global' ? `<button class="act act-amp ${m.amplified ? 'amplified' : ''}" data-act="amplify" aria-pressed="${!!m.amplified}" ${mine ? 'disabled title="You can’t amplify your own memo"' : ''}>
-          <svg viewBox="0 0 24 24"><path d="M3 10v4h3l5 4V6L6 10zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12"/></svg>
-          <span class="act-label">Amplify</span><span class="act-count">${fmtCount(m.amplifies || 0)}</span>
+        ${m.audience === 'global' ? `<button class="act act-amp ${m.amplified ? 'amplified' : ''}" data-act="amplify" aria-pressed="${!!m.amplified}" ${mine ? 'disabled title="You can’t repost your own memo"' : ''}>
+          <svg viewBox="0 0 24 24"><path d="M4 11V9a3 3 0 0 1 3-3h12m-3-3 3 3-3 3M20 13v2a3 3 0 0 1-3 3H5m3 3-3-3 3-3"/></svg>
+          <span class="act-label">Repost</span><span class="act-count">${fmtCount(m.amplifies || 0)}</span>
         </button>` : ''}
         <button class="more-btn" data-act="more" aria-label="More options for this memo">${ICON_MORE}</button>
       </div>
@@ -149,6 +149,7 @@ function memoHTML(m, reason) {
 }
 
 function renderList(el, memos, emptyText, reasons) {
+  prefetchAudio(memos);
   el.innerHTML = memos.length
     ? memos.map(m => memoHTML(m, reasons && reasons.get(m.id))).join('')
     : `<li class="empty">${emptyText}</li>`;
@@ -227,7 +228,7 @@ function rankDiscover(memos) {
     const plays = listening.plays[m.userId] || 0;
     if (plays) { affinity += Math.min(plays, 5) * 0.5; reason = reason || `You’ve listened to @${m.author.handle}`; }
     const popularity = Math.log1p(m.likes) + 1.5 * Math.log1p(m.comments || 0) + 2 * Math.log1p(m.amplifies || 0);
-    if (!reason && popularity >= 3) reason = 'Popular on RiffRaff';
+    if (!reason && popularity >= 3) reason = 'Popular on TwoCents';
     const ageHours = Math.max(0, now - m.createdAt) / 36e5;
     let score = (1 + popularity + affinity) / Math.pow(ageHours + 2, 0.8);
     if (state.following.has(m.userId)) { score *= 0.5; reason = ''; }
@@ -347,6 +348,34 @@ async function sourceFor(m) {
   return urlCache.get(m.id);
 }
 
+// iPhones only let audio start right when you tap. Looking up a memo's audio
+// address takes a moment, so: fetch addresses ahead of time for memos on screen,
+// and if one isn't ready, start a silent clip on tap to keep playback allowed.
+const SILENT_AUDIO = 'data:audio/wav;base64,UklGRuwAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YcgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+const prefetching = new Set();
+function prefetchAudio(memos) {
+  if (!backend || !backend.me) return;
+  memos.slice(0, 15).forEach(m => {
+    if (urlCache.has(m.id) || prefetching.has(m.id)) return;
+    prefetching.add(m.id);
+    backend.audioUrl(m)
+      .then(url => urlCache.set(m.id, url))
+      .catch(() => {})
+      .finally(() => prefetching.delete(m.id));
+  });
+}
+function playErrorMessage(e) {
+  const code = (e && e.code) || '';
+  if (code === 'storage/unauthorized') return 'You don’t have access to this memo anymore.';
+  if (code === 'storage/object-not-found') return 'This memo’s audio was deleted.';
+  if (code.startsWith('storage/')) return 'Couldn’t load the audio. Check your connection and try again.';
+  if (e && e.name === 'NotAllowedError') return 'Tap play again to listen.';
+  if ((e && e.name === 'NotSupportedError') || (audio.error && audio.error.code === 4)) {
+    return 'This memo’s audio format can’t play on this device.';
+  }
+  return 'Couldn’t play this memo. Try again.';
+}
+
 function cardsFor(id) {
   return document.querySelectorAll(`.memo[data-id="${CSS.escape(id)}"]`);
 }
@@ -395,8 +424,15 @@ async function togglePlay(m, seekFrac) {
   player.memo = m;
   markPlaying(m.id, true);
   try {
-    audio.src = await sourceFor(m);
-    if (player.memo !== m) return;
+    if (urlCache.has(m.id)) {
+      audio.src = urlCache.get(m.id); // ready: start playing within the tap
+    } else {
+      audio.src = SILENT_AUDIO;       // keep playback allowed while we look it up
+      audio.play().catch(() => {});
+      const url = await sourceFor(m);
+      if (player.memo !== m) return;
+      audio.src = url;
+    }
     if (seekFrac != null) {
       await new Promise(r => {
         if (audio.readyState >= 1) r();
@@ -407,7 +443,10 @@ async function togglePlay(m, seekFrac) {
     audio.playbackRate = state.rate;
     await audio.play();
   } catch (e) {
-    toast('Couldn’t play this memo.');
+    console.error('Playback failed', e, audio.error);
+    if (player.memo === m) stopPlayback();
+    toast(playErrorMessage(e));
+    return;
   }
   markPlaying(m.id, true);
   cancelAnimationFrame(player.raf);
@@ -424,6 +463,7 @@ function stopPlayback() {
   paintProgress(id, 0);
 }
 audio.addEventListener('ended', () => {
+  if (audio.src.startsWith('data:')) return; // the silent placeholder, not a memo
   const m = player.memo;
   stopPlayback();
   // Keep scrolling hands-free: play the next memo in the visible feed.
@@ -439,6 +479,12 @@ audio.addEventListener('ended', () => {
   }
 });
 audio.addEventListener('pause', () => player.memo && markPlaying(player.memo.id, true));
+audio.addEventListener('error', () => {
+  if (!player.memo || audio.src.startsWith('data:')) return;
+  console.error('Audio error', audio.error);
+  stopPlayback();
+  toast(playErrorMessage(null));
+});
 
 // ---------- Recorder ----------
 const rec = {
@@ -510,7 +556,7 @@ function drawLevels(levels) {
 function micErrorMessage(e) {
   if (!window.isSecureContext) return 'Recording needs a secure connection. Open the app from its https:// address.';
   if (!navigator.mediaDevices || !window.MediaRecorder) return 'This browser can’t record audio. Try Safari or Chrome.';
-  if (e && e.name === 'NotAllowedError') return 'RiffRaff needs your microphone. Allow microphone access in your browser or phone settings, then tap record again.';
+  if (e && e.name === 'NotAllowedError') return 'TwoCents needs your microphone. Allow microphone access in your browser or phone settings, then tap record again.';
   if (e && e.name === 'NotFoundError') return 'No microphone was found on this device.';
   return 'Couldn’t start the microphone. Close other apps using it and try again.';
 }
@@ -852,7 +898,7 @@ async function toggleAmplify(m) {
   paintAmplify(m);
   try {
     Object.assign(m, await backend.toggleAmplify({ ...m, ...before }));
-    toast(m.amplified ? 'Amplified to your followers' : 'Amplify removed');
+    toast(m.amplified ? 'Reposted to your followers' : 'Repost removed');
   } catch (e) {
     Object.assign(m, before);
     toast(friendlyError(e));
@@ -880,7 +926,7 @@ async function toggleLike(m) {
 }
 
 async function deleteMemo(m) {
-  const ok = await chooseAction('Delete this memo? Its likes, riffs and amplifies go with it. This can’t be undone.',
+  const ok = await chooseAction('Delete this memo? Its likes, comments and reposts go with it. This can’t be undone.',
     [{ key: 'delete', label: 'Delete memo', danger: true }]);
   if (ok !== 'delete') return;
   if (player.memo && player.memo.id === m.id) stopPlayback();
@@ -1028,7 +1074,7 @@ const REASONS = [
 
 // target: {type, targetId, targetAuthorId, memoId, text, author}
 async function reportFlow(target) {
-  const what = { memo: 'this memo', comment: 'this riff', user: `@${target.author.handle}` }[target.type];
+  const what = { memo: 'this memo', comment: 'this comment', user: `@${target.author.handle}` }[target.type];
   const reason = await chooseAction(`Why are you reporting ${what}?`, REASONS);
   if (!reason) return;
   const { author, ...report } = target;
@@ -1045,7 +1091,7 @@ async function reportFlow(target) {
 async function blockUser(user, confirmed) {
   if (!confirmed) {
     const ok = await chooseAction(
-      `Block @${user.handle}? They won’t be able to follow you, riff on your memos or send you memos, and you won’t see theirs. They won’t be told.`,
+      `Block @${user.handle}? They won’t be able to follow you, comment on your memos or send you memos, and you won’t see theirs. They won’t be told.`,
       [{ key: 'block', label: `Block @${user.handle}`, danger: true }]);
     if (ok !== 'block') return;
   }
@@ -1093,14 +1139,14 @@ function commentHTML(c) {
         <div class="comment-meta"><b data-user="${esc(u.id)}">${esc(u.name)}</b> · ${timeAgo(c.createdAt)}</div>
         <p class="comment-text">${esc(filterText(c.text))}</p>
       </div>
-      <button class="more-btn" data-cmore="${esc(c.id)}" aria-label="More options for this riff">${ICON_MORE}</button>
+      <button class="more-btn" data-cmore="${esc(c.id)}" aria-label="More options for this comment">${ICON_MORE}</button>
     </li>`;
 }
 function renderComments() {
   $('#comment-list').innerHTML = comments.length
     ? comments.map(commentHTML).join('')
-    : '<li class="empty">No riffs yet. Start one.</li>';
-  $('#comments-title').textContent = comments.length === 1 ? '1 riff' : `${comments.length} riffs`;
+    : '<li class="empty">No comments yet. Be the first.</li>';
+  $('#comments-title').textContent = comments.length === 1 ? '1 comment' : `${comments.length} comments`;
 }
 function setCommentCount(m, n) {
   m.comments = n;
@@ -1121,7 +1167,7 @@ function openComments(m) {
   openMemo = m;
   comments = [];
   $('#comment-list').innerHTML = '<li class="empty">Loading…</li>';
-  $('#comments-title').textContent = 'Riffs';
+  $('#comments-title').textContent = 'Comments';
   commentInput.value = '';
   $('#comment-send').disabled = true;
   commentsSheet.hidden = false;
@@ -1151,7 +1197,7 @@ $('#comment-form').addEventListener('submit', async e => {
     const list = $('#comment-list');
     list.scrollTop = list.scrollHeight;
   } catch (err) {
-    toast(err && err.code === 'permission-denied' ? 'You can’t riff on this memo.' : friendlyError(err));
+    toast(err && err.code === 'permission-denied' ? 'You can’t comment on this memo.' : friendlyError(err));
     $('#comment-send').disabled = false;
   }
 });
@@ -1164,12 +1210,12 @@ $('#comment-list').addEventListener('click', async e => {
   const mine = c.userId === backend.me.id;
   const myMemo = m.userId === backend.me.id;
   const items = [];
-  if (mine || myMemo) items.push({ key: 'delete', label: 'Delete riff', danger: true });
+  if (mine || myMemo) items.push({ key: 'delete', label: 'Delete comment', danger: true });
   if (!mine) {
-    items.push({ key: 'report', label: 'Report riff', danger: true });
+    items.push({ key: 'report', label: 'Report comment', danger: true });
     items.push({ key: 'block', label: `Block @${c.author.handle}`, danger: true });
   }
-  const key = await chooseAction(mine ? 'Your riff' : `Riff from @${c.author.handle}`, items);
+  const key = await chooseAction(mine ? 'Your comment' : `Comment from @${c.author.handle}`, items);
   if (key === 'delete') {
     try {
       await backend.deleteComment(m, c);
@@ -1684,9 +1730,9 @@ async function boot() {
       backend = mod.createFirebaseBackend(config, { emulators });
     } catch (e) {
       // With real accounts configured, never fall back to demo mode: say what happened instead.
-      console.error('RiffRaff could not connect', e);
+      console.error('TwoCents could not connect', e);
       clearTimeout(slow);
-      bootMessage('RiffRaff couldn’t load. Check your internet connection (and any content blocker), then try again.', true);
+      bootMessage('TwoCents couldn’t load. Check your internet connection (and any content blocker), then try again.', true);
       return;
     }
   } else {

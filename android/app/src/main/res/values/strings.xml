@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">RiffRaff</string>
-    <string name="title_activity_main">RiffRaff</string>
+    <string name="app_name">TwoCents</string>
+    <string name="title_activity_main">TwoCents</string>
     <string name="package_name">com.gopherturtle.app</string>
     <string name="custom_url_scheme">com.gopherturtle.app</string>
 </resources>
