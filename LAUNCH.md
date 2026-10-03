@@ -8,7 +8,8 @@ A checklist for getting TwoCents into the App Store and Google Play, and for shi
 - [ ] **App ID.** Currently `com.gopherturtle.app` in `capacitor.config.json`. It can't change after the first store submission, so set it now (for example `com.twocentsapp.app`). Tell Claude and it will update the iOS and Android projects.
 - [x] **Support email:** `owner@snacktimemedia.net` (used on the pages below). Ask Claude to change it anytime, and update it in App Store Connect and Play Console too.
 - [ ] **Firebase public name.** Firebase console → Project settings → General → *Public-facing name* → `TwoCents`. This is the name in password-reset emails. Also review the templates under Authentication → Templates.
-- [ ] **Web address (optional).** Firebase Hosting → *Add another site* (for example `twocents.web.app`), or connect your own domain.
+- [x] **Website / marketing URL:** https://www.snacktimemedia.net/two-cents. Use it as the *Marketing URL* (Apple) and *Website* (Google Play). Link the privacy and support pages from it too, so people can find them from your site.
+- [ ] **Web address for the app itself (optional).** Firebase Hosting → *Add another site* (for example `twocents.web.app`), or connect your own domain.
 
 ## 2. Pages you need
 
