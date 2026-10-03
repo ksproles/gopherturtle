@@ -456,6 +456,7 @@ const cctx = canvas.getContext('2d');
 const preview = new Audio();
 
 function openSheet() {
+  if (!backend || !backend.me) return; // not signed in or still loading
   stopPlayback();
   resetRecorder();
   sheet.hidden = false;
@@ -628,7 +629,7 @@ function syncAudienceColor() {
 }
 
 async function submitPost() {
-  if (!rec.blob) return;
+  if (!rec.blob || !backend || !backend.me) return;
   const btn = $('#post-submit');
   btn.disabled = true;
   btn.textContent = 'Posting…';
@@ -1661,24 +1662,41 @@ const EMULATOR_CONFIG = {
   apiKey: 'demo-key', authDomain: 'demo-gopherturtle.firebaseapp.com', projectId: 'demo-gopherturtle',
   storageBucket: 'demo-gopherturtle.appspot.com', appId: 'demo-app',
 };
+// The loading screen stays up until the app is connected and knows who you are,
+// so nothing (like Post) can be used before it's ready.
+const bootScreen = $('#boot');
+function bootMessage(text, retry) {
+  $('#boot-text').textContent = text;
+  $('#boot-retry').hidden = !retry;
+}
+$('#boot-retry').addEventListener('click', () => location.reload());
+
 async function boot() {
   // Add ?emulators to the URL to use the local Firebase emulators (npm run emulators).
   const emulators = /[?&]emulators\b/.test(location.search);
   // The emulators always use a separate demo project, never your real one.
-const config = emulators ? EMULATOR_CONFIG : firebaseConfig;
+  const config = emulators ? EMULATOR_CONFIG : firebaseConfig;
+  const slow = setTimeout(() => bootMessage('Still loading… This is taking longer than usual. Check your connection.', true), 12000);
   if (config) {
     try {
       const mod = await import('./backend-firebase.js');
       friendlyError = mod.friendlyError;
       backend = mod.createFirebaseBackend(config, { emulators });
     } catch (e) {
-      console.error('Firebase failed to load, falling back to demo mode', e);
+      // With real accounts configured, never fall back to demo mode: say what happened instead.
+      console.error('RiffRaff could not connect', e);
+      clearTimeout(slow);
+      bootMessage('RiffRaff couldn’t load. Check your internet connection (and any content blocker), then try again.', true);
+      return;
     }
+  } else {
+    backend = createDemoBackend();
   }
-  if (!backend) backend = createDemoBackend();
   app.dataset.mode = backend.mode;
 
   backend.init(user => {
+    clearTimeout(slow);
+    bootScreen.hidden = true;
     if (!user) { showAuth('signin'); return; }
     if (user.needsProfile) { showAuth('profile'); return; }
     if (user.error) { showAuth('signin'); authError(user.error); return; }

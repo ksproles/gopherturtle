@@ -30,6 +30,18 @@
     </nav>
   </header>
 
+  <!-- Loading screen: covers the app until it's connected and knows who you are -->
+  <div class="boot" id="boot" role="status" aria-live="polite">
+    <svg class="boot-mark" viewBox="0 0 512 512" aria-hidden="true">
+      <rect x="76" y="196" width="56" height="120" rx="28" fill="currentColor" opacity=".45"/>
+      <rect x="168" y="120" width="56" height="272" rx="28" fill="currentColor"/>
+      <rect x="260" y="76" width="56" height="360" rx="28" fill="currentColor"/>
+      <rect x="352" y="160" width="56" height="192" rx="28" fill="currentColor" opacity=".7"/>
+    </svg>
+    <p class="boot-text" id="boot-text">Loading…</p>
+    <button class="primary-btn boot-retry" id="boot-retry" hidden>Try again</button>
+  </div>
+
   <!-- Pull to refresh indicator -->
   <div class="ptr" id="ptr" aria-hidden="true">
     <span class="ptr-spinner"></span><span class="ptr-text" id="ptr-text">Pull to refresh</span>

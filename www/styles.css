@@ -757,6 +757,19 @@ button { cursor: pointer; }
 .unblock-btn { flex: none; padding: 7px 12px; border: 1.5px solid var(--line); border-radius: 999px; background: none; font-size: 13px; font-weight: 700; }
 .terms { font-size: 12.5px; }
 
+/* ---------- Loading screen ---------- */
+.boot {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 24px;
+  background: var(--bg);
+  text-align: center;
+}
+.boot-mark { width: 64px; height: 64px; color: var(--shell); animation: pulse 1.4s ease-in-out infinite; }
+.boot-text { margin: 0; max-width: 30ch; color: var(--ink-2); font-weight: 600; }
+.boot-retry { min-width: 160px; }
+@keyframes pulse { 50% { opacity: .45; transform: scale(.94); } }
+
 /* ---------- Pull to refresh ---------- */
 .ptr {
   position: absolute;
