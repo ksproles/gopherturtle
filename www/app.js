@@ -42,6 +42,8 @@ const state = {
   screen: 'home',
   query: '',
   closeCount: 0,
+  following: new Set(),   // people you follow
+  signals: null,          // Discover ranking data from the backend
   rate: SPEEDS.includes(prefs.get('rate', 1)) ? prefs.get('rate', 1) : 1,
 };
 
@@ -50,8 +52,11 @@ const $ = sel => document.querySelector(sel);
 const app = $('#app');
 const feedEl = $('#feed');
 const discoverEl = $('#discover-feed');
-// Home shows close friends + following; global memos live on Discover.
-const HOME_AUDIENCES = ['close', 'followers'];
+// Home: everything from people you follow, close friends memos sent to you, and your own.
+// Discover: public (global) memos, ranked for you.
+function onHome(m) {
+  return m.userId === backend.me.id || m.audience === 'close' || state.following.has(m.userId);
+}
 const feedLabel = $('#feed-label');
 
 // ---------- Helpers ----------
@@ -89,7 +94,7 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l
 const ICON_MORE = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>';
 
-function memoHTML(m) {
+function memoHTML(m, reason) {
   const u = m.author;
   const mine = m.userId === backend.me.id;
   const aud = AUDIENCES[m.audience];
@@ -104,6 +109,7 @@ function memoHTML(m) {
         </div>
         <span class="aud-badge">${aud.label}</span>
       </div>
+      ${reason ? `<p class="memo-reason">${esc(reason)}</p>` : ''}
       ${m.caption ? `<p class="memo-caption">${esc(filterText(m.caption))}</p>` : ''}
       <div class="player">
         <button class="play-btn" data-act="play" aria-label="Play memo from ${esc(u.name)}. Press and hold for playback speed.">${ICON_PLAY}</button>
@@ -128,9 +134,9 @@ function memoHTML(m) {
     </li>`;
 }
 
-function renderList(el, memos, emptyText) {
+function renderList(el, memos, emptyText, reasons) {
   el.innerHTML = memos.length
-    ? memos.map(memoHTML).join('')
+    ? memos.map(m => memoHTML(m, reasons && reasons.get(m.id))).join('')
     : `<li class="empty">${emptyText}</li>`;
   if (player.memo) markPlaying(player.memo.id, true);
 }
@@ -145,16 +151,79 @@ function renderHome() {
     feedEl.innerHTML = '';
     return;
   }
-  const list = sorted(state.memos.filter(m =>
-    HOME_AUDIENCES.includes(m.audience) && (!state.filter || m.audience === state.filter)));
-  feedLabel.textContent = state.filter
-    ? `${AUDIENCES[state.filter].feedLabel} · newest first`
-    : 'Close friends and following, newest first';
-  renderList(feedEl, list, state.filter
-    ? `No ${AUDIENCES[state.filter].feedLabel.toLowerCase()} memos yet.`
-    : 'No memos from close friends or people you follow yet. Find people in Search, or check out Discover.');
+  const filters = {
+    close: m => m.audience === 'close',
+    followers: m => state.following.has(m.userId) && m.audience !== 'close',
+  };
+  const list = sorted(state.memos.filter(m => onHome(m) && (!state.filter || filters[state.filter](m))));
+  feedLabel.textContent = {
+    close: 'Close friends · newest first',
+    followers: 'People you follow · newest first',
+  }[state.filter] || 'Close friends and people you follow, newest first';
+  renderList(feedEl, list, {
+    close: 'No close friends memos yet.',
+    followers: 'No memos from people you follow yet. Find people in Search or on Discover.',
+  }[state.filter] || 'No memos yet. Follow people from Search or Discover, and their memos will show up here.');
   document.querySelectorAll('.chip').forEach(c =>
     c.setAttribute('aria-pressed', String(c.dataset.filter === state.filter)));
+}
+
+// ---------- Discover ranking ----------
+// Scores public memos for this person: people followed by people you follow,
+// people whose memos you've liked or listened to, popularity and freshness.
+// Memos you've already heard, and memos from people you already follow
+// (they're on Home), sink lower.
+const listening = {
+  heard: new Set(prefs.get('heard', [])),
+  plays: prefs.get('authorPlays', {}),
+  record(m) {
+    if (this.heard.has(m.id)) return;
+    this.heard.add(m.id);
+    this.plays[m.userId] = (this.plays[m.userId] || 0) + 1;
+    prefs.set('heard', [...this.heard].slice(-500));
+    prefs.set('authorPlays', this.plays);
+  },
+};
+
+function followedByText(names) {
+  if (names.length === 1) return `Followed by ${names[0]}`;
+  if (names.length === 2) return `Followed by ${names[0]} and ${names[1]}`;
+  return `Followed by ${names[0]} and ${names.length - 1} others you follow`;
+}
+
+function rankDiscover(memos) {
+  const sig = state.signals || { fof: new Map() };
+  const now = Date.now();
+  const likedAuthors = new Set(state.memos.filter(m => m.liked && m.userId !== backend.me.id).map(m => m.userId));
+  return memos.map(m => {
+    let affinity = 0;
+    let reason = '';
+    const fof = sig.fof.get(m.userId);
+    if (likedAuthors.has(m.userId)) { affinity += 3; reason = `You liked @${m.author.handle} before`; }
+    if (fof) { affinity += 1.5 + Math.min(fof.length, 3); reason = reason || followedByText(fof); }
+    const plays = listening.plays[m.userId] || 0;
+    if (plays) { affinity += Math.min(plays, 5) * 0.5; reason = reason || `You’ve listened to @${m.author.handle}`; }
+    const popularity = Math.log1p(m.likes) + 1.5 * Math.log1p(m.comments || 0);
+    if (!reason && popularity >= 3) reason = 'Popular on Gopher Turtle';
+    const ageHours = Math.max(0, now - m.createdAt) / 36e5;
+    let score = (1 + popularity + affinity) / Math.pow(ageHours + 2, 0.8);
+    if (state.following.has(m.userId)) { score *= 0.5; reason = ''; }
+    if (listening.heard.has(m.id)) score *= 0.25;
+    return { m, score, reason };
+  }).sort((a, b) => b.score - a.score);
+}
+
+function renderSuggestions() {
+  const box = $('#suggestions');
+  const people = ((state.signals && state.signals.suggestions) || []).filter(p => !state.following.has(p.id));
+  box.hidden = !people.length;
+  $('#suggestion-list').innerHTML = people.map(p => `
+    <li class="suggestion">
+      <div class="avatar" style="--av:${esc(p.color)}">${esc(initials(p.name))}</div>
+      <div class="suggestion-name">${esc(p.name)}</div>
+      <div class="suggestion-why">${esc(followedByText((state.signals.fof.get(p.id) || []).slice(0, 3)))}</div>
+      <button class="follow-btn" data-follow="${esc(p.id)}" aria-pressed="false">Follow</button>
+    </li>`).join('');
 }
 
 function renderDiscover() {
@@ -162,8 +231,11 @@ function renderDiscover() {
     discoverEl.innerHTML = '<li class="empty">Loading memos…</li>';
     return;
   }
-  renderList(discoverEl, sorted(state.memos.filter(m => m.audience === 'global')),
-    'No global memos yet. Post one with the audience set to Global.');
+  renderSuggestions();
+  const ranked = rankDiscover(state.memos.filter(m => m.audience === 'global' && m.userId !== backend.me.id));
+  renderList(discoverEl, ranked.map(r => r.m),
+    'No public memos yet. Post one with the audience set to Global.',
+    new Map(ranked.map(r => [r.m.id, r.reason])));
 }
 
 let searchSeq = 0;
@@ -262,7 +334,10 @@ function paintProgress(id, frac) {
 function tick() {
   if (!player.memo) return;
   const d = audio.duration && isFinite(audio.duration) ? audio.duration : player.memo.duration;
-  paintProgress(player.memo.id, Math.min(1, audio.currentTime / d));
+  const frac = Math.min(1, audio.currentTime / d);
+  paintProgress(player.memo.id, frac);
+  // Count a memo as heard once most of it has played (used to tailor Discover).
+  if (frac > 0.6 && player.memo.userId !== backend.me.id) listening.record(player.memo);
   player.raf = requestAnimationFrame(tick);
 }
 
@@ -763,8 +838,8 @@ async function confirmDelete(btn, m) {
   } catch (e) { toast(friendlyError(e)); }
 }
 
-// Follow / unfollow / unblock from search.
-$('#people').addEventListener('click', async e => {
+// Follow / unfollow / unblock from search and Discover suggestions.
+async function onPeopleClick(e) {
   const unblockBtn = e.target.closest('[data-unblock]');
   if (unblockBtn) {
     try {
@@ -789,7 +864,9 @@ $('#people').addEventListener('click', async e => {
     toast(on && err && err.code === 'permission-denied' ? 'You can’t follow this account.' : friendlyError(err));
   }
   btn.disabled = false;
-});
+}
+$('#people').addEventListener('click', onPeopleClick);
+$('#suggestion-list').addEventListener('click', onPeopleClick);
 
 $('#search-input').addEventListener('input', e => { state.query = e.target.value; renderSearch(); });
 
@@ -1172,9 +1249,15 @@ async function refreshFeed() {
   if (!backend.me) return;
   const seq = ++feedSeq;
   try {
-    const memos = await backend.loadFeed();
+    const following = await backend.getFollowing();
+    const [memos, signals] = await Promise.all([
+      backend.loadFeed(),
+      backend.discoverSignals().catch(e => { console.warn('Discover signals unavailable', e); return null; }),
+    ]);
     if (seq !== feedSeq) return;
+    state.following = following;
     state.memos = memos;
+    state.signals = signals;
   } catch (e) {
     console.error(e);
     if (seq === feedSeq) toast(friendlyError(e));

@@ -129,13 +129,14 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
 
   // Newest-first query. Sorting needs a composite index (firestore.indexes.json);
   // if it's missing or still building, fall back to an unsorted query and sort here.
-  async function sortedQuery(col, filter, max) {
+  async function sortedQuery(col, filters, max) {
+    filters = [].concat(filters);
     try {
-      return (await getDocs(query(col, filter, orderBy('createdAt', 'desc'), limit(max)))).docs;
+      return (await getDocs(query(col, ...filters, orderBy('createdAt', 'desc'), limit(max)))).docs;
     } catch (e) {
       if (e.code !== 'failed-precondition') throw e;
       console.warn('Index not ready yet, using an unsorted query:', e.message);
-      const docs = (await getDocs(query(col, filter, limit(max * 4)))).docs;
+      const docs = (await getDocs(query(col, ...filters, limit(max * 4)))).docs;
       return docs.sort((a, b) => toMs(b.data().createdAt) - toMs(a.data().createdAt)).slice(0, max);
     }
   }
@@ -216,17 +217,23 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       const memosCol = collection(db, 'memos');
       // Each list loads on its own, so one failing (for example an index that's
       // still building) never hides the others.
+      // Global memos from people you follow belong on Home, so fetch them directly
+      // (Firestore 'in' filters take up to 30 people at a time).
+      const followed = [...following];
+      const chunks = [];
+      for (let i = 0; i < followed.length && i < 300; i += 30) chunks.push(followed.slice(i, i + 30));
       const results = await Promise.allSettled([
         getDocs(query(collection(db, 'feeds', id, 'items'), orderBy('createdAt', 'desc'), limit(FEED_LIMIT))).then(r => r.docs),
-        sortedQuery(memosCol, where('audience', '==', 'global'), 50),
+        sortedQuery(memosCol, where('audience', '==', 'global'), 100),
         sortedQuery(memosCol, where('authorId', '==', id), 100),
+        ...chunks.map(c => sortedQuery(memosCol, [where('authorId', 'in', c), where('audience', '==', 'global')], 50)),
       ]);
       const failed = results.filter(r => r.status === 'rejected');
       failed.forEach(r => console.error('Feed list failed to load', r.reason));
       if (failed.length === results.length) throw failed[0].reason;
-      const [inbox, global, mine] = results.map(r => (r.status === 'fulfilled' ? r.value : []));
+      const [inbox, global, mine, ...followedGlobal] = results.map(r => (r.status === 'fulfilled' ? r.value : []));
       const snaps = new Map();
-      [...global, ...mine].forEach(s => snaps.set(s.id, s));
+      [...global, ...mine, ...followedGlobal.flat()].forEach(s => snaps.set(s.id, s));
       // Delivered memos: fetch each one; deleted memos simply fail and are skipped.
       const delivered = await Promise.all(inbox
         .filter(s => !snaps.has(s.id))
@@ -360,6 +367,34 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     async getBlocked() {
       const list = await Promise.all([...blocked].map(getUser));
       return list.sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    async getFollowing() { return new Set(following); },
+
+    // Signals for ranking Discover: who the people you follow follow.
+    async discoverSignals() {
+      const ids = [...following].slice(0, 30);
+      const fof = new Map(); // uid -> uids of people you follow who follow them
+      if (ids.length) {
+        const snap = await getDocs(query(collection(db, 'follows'), where('follower', 'in', ids), limit(500)));
+        snap.docs.forEach(d => {
+          const { follower, target } = d.data();
+          if (target === uid() || following.has(target) || blocked.has(target)) return;
+          if (!fof.has(target)) fof.set(target, []);
+          fof.get(target).push(follower);
+        });
+      }
+      const names = new Map();
+      await Promise.all([...new Set([...fof.values()].flat())].map(async u => names.set(u, (await getUser(u)).name)));
+      const top = [...fof.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 10);
+      const suggestions = (await Promise.all(top.map(([u]) => getUser(u))))
+        .filter(u => u.handle !== 'deleted')
+        .map(u => ({ ...u, following: false, close: closeIds.has(u.id), blocked: false }));
+      return {
+        following: new Set(following),
+        fof: new Map([...fof].map(([u, fs]) => [u, fs.map(f => names.get(f) || 'someone')])),
+        suggestions,
+      };
     },
 
     async closeFriendCandidates() {

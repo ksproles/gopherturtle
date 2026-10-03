@@ -39,8 +39,12 @@
     <section class="screen" id="screen-discover" aria-label="Discover" hidden>
       <div class="discover-head" data-aud="global">
         <h2 class="discover-title">Discover</h2>
-        <p class="discover-sub">Global memos from everyone on Gopher Turtle, newest first.</p>
+        <p class="discover-sub">Public memos picked for you, based on who you follow and what you like and listen to.</p>
       </div>
+      <section class="suggestions" id="suggestions" aria-labelledby="suggestions-title" hidden>
+        <h3 class="section-title" id="suggestions-title">People you might like</h3>
+        <ul class="suggestion-list" id="suggestion-list"></ul>
+      </section>
       <ol class="feed" id="discover-feed"></ol>
     </section>
 

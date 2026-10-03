@@ -7,13 +7,13 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 ## Features
 
 **Home**
-- A top bar with two color-coded filters: **Close friends** (green) and **Following** (blue). Tap one to show only that audience. Tap it again to go back to both.
-- With no filter selected, Home shows close friends and following memos together, newest first.
+- Home shows everything from people you follow (followers-only and global memos), close friends memos sent to you, and your own memos, newest first.
+- Two color-coded filters: **Close friends** (green) and **Following** (blue, everyone you follow). Tap one to narrow the list; tap it again to see both.
 - Each memo card carries its audience color: a stripe down the side, a badge, a play button, and a waveform that fills in as it plays.
 - When a memo finishes, the next one in the list plays automatically.
 - **Playback speed:** press and hold any play button to pick 1×, 1.25×, 1.5× or 2×. The speed applies to every memo and is remembered. Cards show the speed when it isn't 1×.
 
-**Discover**: global memos (orange) from everyone, newest first.
+**Discover**: public (global) memos from everyone, ranked for you. The ranking favors people followed by people you follow, people whose memos you've liked or listened to, popular memos (likes and comments) and recent ones. Memos you've already heard and memos from people you already follow (they're on Home) rank lower. Each card says why it was picked ("Followed by Maya", "Popular on Gopher Turtle"), and a "People you might like" row suggests accounts to follow. Listening history is kept on the device.
 
 **Bottom bar**: Home · Discover · Post · Search · Profile
 

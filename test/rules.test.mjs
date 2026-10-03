@@ -143,6 +143,14 @@ await test('the feed queries the app makes are allowed', async () => {
   await assertSucceeds(getDocs(query(collection(d, 'memos'), where('audience', '==', 'global'), orderBy('createdAt', 'desc'))));
   await assertSucceeds(getDocs(query(collection(d, 'memos'), where('authorId', '==', 'carol'), orderBy('createdAt', 'desc'))));
 });
+await test('loading global memos from people you follow is allowed', async () => {
+  const d = db('alice');
+  await assertSucceeds(getDocs(query(collection(d, 'memos'), where('authorId', 'in', ['bob', 'carol']), where('audience', '==', 'global'), orderBy('createdAt', 'desc'))));
+});
+await test('but not their followers-only memos by query', async () => {
+  const d = db('carol');
+  await assertFails(getDocs(query(collection(d, 'memos'), where('authorId', 'in', ['bob']))));
+});
 await test('listing all memos is not allowed', async () => {
   await assertFails(getDocs(collection(db('carol'), 'memos')));
 });

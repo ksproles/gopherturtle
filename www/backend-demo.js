@@ -191,6 +191,20 @@ export function createDemoBackend() {
     async unblock(id) { blocked.delete(id); prefs.set('blocked', [...blocked]); },
     async getBlocked() { return people.filter(p => blocked.has(p.id)); },
 
+    async getFollowing() { return new Set(following); },
+    async discoverSignals() {
+      // Example "followed by people you follow" data for demo mode.
+      const fofRaw = { u6: ['u1', 'u3'], u7: ['u2'], u8: ['u5', 'u1', 'u4'] };
+      const fof = new Map();
+      Object.entries(fofRaw).forEach(([u, fs]) => {
+        if (following.has(u) || blocked.has(u)) return;
+        const names = fs.filter(f => following.has(f)).map(f => byId[f].name);
+        if (names.length) fof.set(u, names);
+      });
+      const suggestions = [...fof.keys()].map(u => relation(byId[u]));
+      return { following: new Set(following), fof, suggestions };
+    },
+
     async closeFriendCandidates() {
       return people.filter(p => !blocked.has(p.id) && (following.has(p.id) || p.followsMe || closeIds.has(p.id))).map(relation);
     },
