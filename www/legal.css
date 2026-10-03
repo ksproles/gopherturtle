@@ -1,0 +1,67 @@
+/* Shared styles for the Privacy, Terms and Support pages. */
+:root {
+  --bg: #f3f5ef;
+  --surface: #ffffff;
+  --ink: #1b241e;
+  --ink-2: #5a665d;
+  --line: #d9dfd3;
+  --shell: #2f6b4f;
+  --link: #2f6b4f;
+  --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111512;
+    --surface: #1a201c;
+    --ink: #e8eee7;
+    --ink-2: #9aa79d;
+    --line: #2c352f;
+    --shell: #8cc7a5;
+    --link: #8cc7a5;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 48px);
+}
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 28px; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font: 800 21px/1 var(--font-display); }
+.brand svg { width: 28px; height: 28px; color: var(--shell); }
+.back { color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.back:hover { color: var(--ink); }
+h1 { margin: 0; font: 800 34px/1.1 var(--font-display); letter-spacing: -.01em; text-wrap: balance; }
+.updated { margin: 6px 0 28px; color: var(--ink-2); font-size: 14px; }
+h2 { margin: 36px 0 8px; font: 700 21px/1.25 var(--font-display); text-wrap: balance; }
+h3 { margin: 22px 0 4px; font-size: 16px; }
+p, li { max-width: 65ch; }
+ul { padding-left: 1.2em; }
+li + li { margin-top: 4px; }
+a { color: var(--link); text-underline-offset: 3px; }
+.card {
+  margin: 20px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.card p { margin: 0; }
+.email { font-weight: 700; overflow-wrap: anywhere; }
+details { border-top: 1px solid var(--line); padding: 12px 0; }
+details:last-of-type { border-bottom: 1px solid var(--line); }
+summary { font-weight: 700; cursor: pointer; }
+details p { margin: 8px 0 0; color: var(--ink-2); }
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+footer a { color: var(--ink-2); }
+:focus-visible { outline: 2.5px solid var(--link); outline-offset: 2px; border-radius: 6px; }

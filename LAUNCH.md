@@ -6,17 +6,19 @@ A checklist for getting TwoCents into the App Store and Google Play, and for shi
 
 - [ ] **Final name.** Search the App Store and Google Play to make sure "TwoCents" isn't already taken, and do a quick trademark search (USPTO TESS for the US).
 - [ ] **App ID.** Currently `com.gopherturtle.app` in `capacitor.config.json`. It can't change after the first store submission, so set it now (for example `com.twocentsapp.app`). Tell Claude and it will update the iOS and Android projects.
-- [ ] **Support email.** A dedicated address (for example `twocents.help@gmail.com`) for users, Apple and Google.
+- [x] **Support email:** `owner@snacktimemedia.net` (used on the pages below). Ask Claude to change it anytime, and update it in App Store Connect and Play Console too.
 - [ ] **Firebase public name.** Firebase console → Project settings → General → *Public-facing name* → `TwoCents`. This is the name in password-reset emails. Also review the templates under Authentication → Templates.
 - [ ] **Web address (optional).** Firebase Hosting → *Add another site* (for example `twocents.web.app`), or connect your own domain.
 
 ## 2. Pages you need
 
-Claude can build these and host them with the app:
+These are built and published with the app. They're linked from Profile, the sign-in screen and sign-up:
 
-- [ ] **Privacy policy.** Required by both stores. It covers what you collect (email, name and handle, voice recordings, captions, comments, likes and follows), why, who can see it, and how to delete it (Profile → Delete account).
-- [ ] **Terms of use / community guidelines.** Zero tolerance for abuse (Apple requires this for apps where people post content), a minimum age of 13, and how reports are handled.
-- [ ] **Support page.** Your contact email and a few FAQs.
+- [x] **Privacy policy:** https://gopher-turtle.web.app/privacy.html (`www/privacy.html`)
+- [x] **Terms & community rules** (zero tolerance, 13+): https://gopher-turtle.web.app/terms.html (`www/terms.html`)
+- [x] **Support page** with FAQs: https://gopher-turtle.web.app/support.html (`www/support.html`)
+
+These are solid starting templates written to match how TwoCents actually works, but they aren't legal advice. Have someone qualified review them before launch, especially if you form a company (add its legal name) or want a governing-law clause.
 
 ## 3. Developer accounts
 

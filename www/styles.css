@@ -629,6 +629,10 @@ button { cursor: pointer; }
 /* ---------- Account ---------- */
 .account-email { margin: 0 2px 10px; color: var(--ink-2); overflow-wrap: anywhere; }
 .account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 28px 0 4px; font-size: 13.5px; }
+.legal-links a { color: var(--ink-2); text-underline-offset: 3px; }
+.auth-legal { margin-top: 18px; }
+.terms a { color: inherit; font-weight: 600; }
 .demo-note { margin: 24px 2px 0; color: var(--ink-2); font-size: 13px; text-align: center; }
 
 /* ---------- Other people's profiles ---------- */

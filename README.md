@@ -47,6 +47,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 | Path | What it is |
 | --- | --- |
 | `www/` | The app itself: `index.html`, `styles.css`, `app.js`, bundled fonts and icon |
+| `www/privacy.html`, `terms.html`, `support.html` | Privacy Policy, Terms & Community Rules, and Support pages (support email: owner@snacktimemedia.net) |
 | `www/backend-demo.js` | Demo mode: example people and memos stored on the device |
 | `www/backend-firebase.js` | Accounts mode: sign-in, shared memos, follows, close friends |
 | `www/firebase-config.js` | Your Firebase project settings (empty = demo mode) |
