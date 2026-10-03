@@ -36,7 +36,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Pull to refresh**: drag down from the top of Home, Discover, Search, your profile, someone's profile or a list, and let go to reload it.
 
-**Search**: find people, follow or unfollow them, and search memo captions.
+**Search**: find people, follow or unfollow them, and search memo captions. While there are 50 or fewer people on TwoCents, Search lists everyone; after that it waits for you to type a name or @handle.
 
 **Profile**: your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
 
@@ -141,6 +141,8 @@ npm run test:rules                # 71 checks of who can read and write what
 - Deleting a memo leaves a few small leftover records (likes, delivery entries) that the app ignores. A scheduled cleanup function can remove them.
 
 ## Getting it into the App Store
+
+See **[LAUNCH.md](LAUNCH.md)** for the full launch checklist and how updates work after launch.
 
 What you need:
 - A Mac with Xcode installed.

@@ -231,6 +231,9 @@ export function createDemoBackend() {
     async unblock(id) { blocked.delete(id); prefs.set('blocked', [...blocked]); },
     async getBlocked() { return people.filter(p => blocked.has(p.id)); },
 
+    async userCount() { return people.length + 1; },
+    listAllUnder: 50,
+
     async getFollowing() { return new Set(following); },
     async discoverSignals() {
       // Example "followed by people you follow" data for demo mode.

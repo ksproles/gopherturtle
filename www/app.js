@@ -275,10 +275,20 @@ async function renderSearch() {
   const seq = ++searchSeq;
   const q = state.query.trim().toLowerCase();
   let people = [];
-  try { people = await backend.searchPeople(q); }
-  catch (e) { toast(friendlyError(e)); }
+  // Once the app has lots of people, Search waits for you to type instead of listing everyone.
+  let searchOnly = false;
+  if (!q) {
+    try { searchOnly = (await backend.userCount()) > backend.listAllUnder; } catch (e) { searchOnly = true; }
+  }
+  if (!searchOnly) {
+    try { people = await backend.searchPeople(q); }
+    catch (e) { toast(friendlyError(e)); }
+  }
   if (seq !== searchSeq) return;
-  $('#people').innerHTML = people.length ? people.map(p => `
+  $('#search-people-title').hidden = searchOnly;
+  if (searchOnly) {
+    $('#people').innerHTML = '<li class="search-hint">Search for people by name or @handle.</li>';
+  } else $('#people').innerHTML = people.length ? people.map(p => `
     <li class="person" data-uid="${esc(p.id)}">
       <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
       <div class="memo-who" data-user="${esc(p.id)}">

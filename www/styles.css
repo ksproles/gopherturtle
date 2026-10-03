@@ -318,6 +318,8 @@ button { cursor: pointer; }
 }
 .rel.none { --aud: var(--ink-2); --aud-soft: var(--surface-2); }
 
+.search-hint { padding: 18px 4px; color: var(--ink-2); text-align: center; }
+
 /* ---------- Profile ---------- */
 .profile-head { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
 .profile-name { margin: 0; font: 800 24px/1.1 var(--font-display); letter-spacing: -.01em; }

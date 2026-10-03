@@ -29,6 +29,8 @@ import { colorFor } from './audio-utils.js';
 
 const FEED_LIMIT = 100;
 const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
+// Search lists everyone while the community is small; above this, it's search-only.
+const LIST_ALL_UNDER = 50;
 
 export class BackendError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -72,6 +74,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
   let closeIds = new Set();   // my private close friends list
   let blocked = new Set();    // uids I've blocked
   let requested = new Set();  // uids I've asked to follow (pending)
+  let userCountCache = null;
   const users = new Map();    // uid -> profile cache
   const memoCache = new Map();
 
@@ -347,7 +350,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       await loadRelations();
       let snaps;
       if (!q) {
-        snaps = (await getDocs(query(usersCol, orderBy('createdAt', 'desc'), limit(25)))).docs;
+        snaps = (await getDocs(query(usersCol, orderBy('createdAt', 'desc'), limit(LIST_ALL_UNDER)))).docs;
       } else {
         const end = q + '';
         const [byHandle, byName] = await Promise.all([
@@ -488,6 +491,15 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       const list = await Promise.all([...blocked].map(getUser));
       return list.sort((a, b) => a.name.localeCompare(b.name));
     },
+
+    // How many people use the app (cached for a few minutes).
+    async userCount() {
+      if (userCountCache && Date.now() - userCountCache.at < 5 * 60 * 1000) return userCountCache.n;
+      const n = (await getCountFromServer(collection(db, 'users'))).data().count;
+      userCountCache = { n, at: Date.now() };
+      return n;
+    },
+    listAllUnder: LIST_ALL_UNDER,
 
     async getFollowing() { await loadRelations().catch(() => {}); return new Set(following); },
 
