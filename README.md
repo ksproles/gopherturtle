@@ -100,9 +100,21 @@ The rules in `firestore.rules` and `storage.rules` run on Google's servers, so t
 
 Apple expects you to act on reports within 24 hours. Reports appear in **Firebase console → Firestore Database → Data → reports**. Each one has the reporter, what was reported (`type`: memo, comment or user, plus `targetId` and `memoId`), the reported person (`targetAuthorId`), the `reason`, and a copy of the caption or comment `text`. To remove reported content, delete the memo (`memos/{memoId}`) or comment (`memos/{memoId}/comments/{targetId}`), then change the report's `status` to `closed`. To ban someone, disable their account under **Authentication → Users**.
 
+### Automatic updates
+
+Every push to GitHub runs `.github/workflows/deploy.yml`: it runs the security rules tests and, if they pass, publishes the web app (https://gopher-turtle.web.app), the Firestore rules and indexes, and the Storage rules. If the tests fail, nothing is published.
+
+One-time setup:
+1. Firebase console → **Project settings → Service accounts** → **Generate new private key**. A `.json` file downloads. Keep it private.
+2. Click **Manage service account permissions** (same page). In the list, find the account named `firebase-adminsdk-…`, click the pencil, **Add another role** → **Firebase Admin**, and **Save**.
+3. GitHub → the repository → **Settings → Secrets and variables → Actions → New repository secret**. Name: `FIREBASE_SERVICE_ACCOUNT`. Value: open the `.json` file in a text editor and paste all of it. **Add secret**.
+4. Delete the downloaded `.json` file from your computer.
+
+Check progress under the repository's **Actions** tab. A green check means the update is live.
+
 ### Updating the rules after a change
 
-Changes to `firestore.rules` or `storage.rules` don't reach Firebase on their own. Either paste the file's contents into the **Rules** tab in the Firebase console and click **Publish**, or run `npx firebase deploy --only firestore,storage` from your computer.
+With automatic updates set up, rules changes are published on every push. Without it, changes to `firestore.rules` or `storage.rules` don't reach Firebase on their own: paste the file's contents into the **Rules** tab in the Firebase console and click **Publish**, or run `npx firebase deploy --only firestore,storage` from your computer.
 
 ### Testing locally without a Firebase project
 

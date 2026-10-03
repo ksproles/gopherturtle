@@ -380,6 +380,14 @@ function drawLevels(levels) {
   });
 }
 
+function micErrorMessage(e) {
+  if (!window.isSecureContext) return 'Recording needs a secure connection. Open the app from its https:// address.';
+  if (!navigator.mediaDevices || !window.MediaRecorder) return 'This browser can’t record audio. Try Safari or Chrome.';
+  if (e && e.name === 'NotAllowedError') return 'Gopher Turtle needs your microphone. Allow microphone access in your browser or phone settings, then tap record again.';
+  if (e && e.name === 'NotFoundError') return 'No microphone was found on this device.';
+  return 'Couldn’t start the microphone. Close other apps using it and try again.';
+}
+
 async function startRecording() {
   resetRecorder();
   rec.demo = false;
@@ -387,6 +395,12 @@ async function startRecording() {
     if (!navigator.mediaDevices || !window.MediaRecorder) throw new Error('unsupported');
     rec.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   } catch (e) {
+    // With real accounts, never post a stand-in recording: explain how to fix it instead.
+    if (backend.mode !== 'demo') {
+      recNote.textContent = micErrorMessage(e);
+      recNote.hidden = false;
+      return;
+    }
     rec.demo = true;
     recNote.textContent = 'Microphone isn’t available here, so this is a demo recording. Open the app on your phone and allow the microphone to record your voice.';
     recNote.hidden = false;

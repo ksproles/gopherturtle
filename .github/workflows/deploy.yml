@@ -1,0 +1,64 @@
+# On every push: run the security rules tests, then publish the web app,
+# Firestore rules + indexes and Storage rules to the gopher-turtle Firebase project.
+# Needs a repository secret named FIREBASE_SERVICE_ACCOUNT (see README → "Automatic updates").
+name: Test and deploy
+
+on:
+  push:
+    branches: [main, claude/charming-turing-mxz05f]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Security rules tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run test:rules
+
+  deploy:
+    name: Deploy to Firebase
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for Firebase credentials
+        id: creds
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SERVICE_ACCOUNT" ]; then
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT secret is not set, so nothing was deployed. See README → Automatic updates."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s' "$SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.creds.outputs.ok == 'true'
+        run: npm ci
+      - name: Deploy app, rules and indexes
+        if: steps.creds.outputs.ok == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx firebase deploy --project gopher-turtle --only hosting,firestore,storage --non-interactive
+      - name: Remove credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
