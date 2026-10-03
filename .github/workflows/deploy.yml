@@ -45,6 +45,8 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
             printf '%s' "$SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+            # The account's email address isn't secret; it helps check permissions in Google Cloud.
+            echo "Deploying as: $(jq -r '.client_email // "unknown (is the secret the whole .json file?)"' "$RUNNER_TEMP/sa.json")"
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/setup-node@v4
