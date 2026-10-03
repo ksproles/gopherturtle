@@ -32,6 +32,10 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Follow requests and profiles**: tap anyone's name or avatar to open their profile. Without following, you only hear their public memos. **Follow** sends a request (the button shows **Requested**); they approve or decline it under **Profile → Follow requests** (a red dot on the Profile tab means someone's waiting). Approved followers hear followers-only memos, including older ones; close friends memos need you on their close friends list. Access follows the current relationship, so it ends when someone removes you as a follower or takes you off their list. Unfollowing or canceling a request works from the same button.
 
+**Followers and following lists**: tap **Followers** or **Following** on any profile to see the list; tap someone to open their profile, and Back returns to the list. On your own Followers list, **Remove** takes someone off (they aren't told). You can also remove a follower from the ••• menu on their profile.
+
+**Pull to refresh**: drag down from the top of Home, Discover, Search, your profile, someone's profile or a list, and let go to reload it.
+
 **Search**: find people, follow or unfollow them, and search memo captions.
 
 **Profile**: your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.

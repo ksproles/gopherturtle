@@ -104,6 +104,16 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     close: closeIds.has(u.id), blocked: blocked.has(u.id),
   });
 
+  async function listPeople(filter, field) {
+    await loadRelations().catch(() => {});
+    const snap = await getDocs(query(collection(db, 'follows'), filter, limit(500)));
+    const list = await Promise.all(snap.docs.map(d => getUser(d.data()[field])));
+    return list
+      .filter(u => u.handle !== 'deleted')
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(u => ({ ...u, ...relationTo(u) }));
+  }
+
   async function loadSelf() {
     const id = uid();
     const snap = await getDoc(doc(db, 'users', id));
@@ -398,12 +408,17 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       await deleteDoc(doc(db, 'follows', `${follower}_${uid()}`));
     },
 
+    // Followers / following lists for any profile (follows are visible to everyone signed in).
+    async listFollowers(userId) { return listPeople(where('target', '==', userId), 'follower'); },
+    async listFollowing(userId) { return listPeople(where('follower', '==', userId), 'target'); },
+
     // Someone's profile, showing only the memos you're allowed to hear.
     async getUserProfile(userId) {
       await loadRelations();
       const user = await getUser(userId);
       const memosCol = collection(db, 'memos');
-      const [followers, followingCount, ...lists] = await Promise.all([
+      const [followsMe, followers, followingCount, ...lists] = await Promise.all([
+        getDoc(doc(db, 'follows', `${userId}_${uid()}`)).then(d => d.exists()).catch(() => false),
         getCountFromServer(query(collection(db, 'follows'), where('target', '==', userId))).then(c => c.data().count).catch(() => 0),
         getCountFromServer(query(collection(db, 'follows'), where('follower', '==', userId))).then(c => c.data().count).catch(() => 0),
         // Each list is allowed or refused by the rules on its own: public for everyone,
@@ -412,7 +427,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
           sortedQuery(memosCol, [where('authorId', '==', userId), where('audience', '==', aud)], 50).catch(() => [])),
       ]);
       const memos = blocked.has(userId) ? [] : await Promise.all(lists.flat().map(toMemo));
-      return { user: { ...user, ...relationTo(user) }, followers, following: followingCount, memos };
+      return { user: { ...user, ...relationTo(user), followsMe }, followers, following: followingCount, memos };
     },
     async unfollow(target) {
       await deleteDoc(doc(db, 'follows', `${uid()}_${target}`)).catch(e => {

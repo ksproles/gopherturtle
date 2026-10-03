@@ -46,7 +46,9 @@ const state = {
   requested: new Set(),   // people you've asked to follow (waiting for approval)
   requests: [],           // people asking to follow you
   viewUser: null,         // whose profile is open
-  backTo: 'home',         // screen to return to from a profile
+  tab: 'home',            // bottom-bar tab you're in
+  nav: [],                // screens to go back to (profiles and lists)
+  list: null,             // open followers/following list: {type, userId, handle}
   profileMemos: [],       // memos shown on someone else's profile
   signals: null,          // Discover ranking data from the backend
   rate: SPEEDS.includes(prefs.get('rate', 1)) ? prefs.get('rate', 1) : 1,
@@ -318,10 +320,12 @@ function renderProfile() {
   }).catch(() => {});
 }
 
+const TAB_SCREENS = ['home', 'discover', 'search', 'profile'];
 function render() {
   app.dataset.screen = state.screen;
   document.querySelectorAll('.screen').forEach(s => { s.hidden = s.id !== 'screen-' + state.screen; });
-  const activeTab = state.screen === 'user' ? state.backTo : state.screen;
+  if (TAB_SCREENS.includes(state.screen)) { state.tab = state.screen; state.nav = []; }
+  const activeTab = state.tab;
   document.querySelectorAll('.tab[data-screen]').forEach(t =>
     t.classList.toggle('is-active', t.dataset.screen === activeTab));
   if (state.screen === 'home') renderHome();
@@ -329,6 +333,7 @@ function render() {
   if (state.screen === 'search') renderSearch();
   if (state.screen === 'profile') renderProfile();
   if (state.screen === 'user') renderUserProfile();
+  if (state.screen === 'people') renderPeopleList();
 }
 
 // ---------- Playback ----------
@@ -1217,14 +1222,25 @@ $('#blocked-list').addEventListener('click', async e => {
 });
 
 // ---------- Other people's profiles ----------
+// Profiles and lists stack up so Back returns to where you came from.
+function navigate(to) {
+  state.nav.push({ screen: state.screen, viewUser: state.viewUser, list: state.list });
+  Object.assign(state, to);
+  render();
+  $('#screen-' + state.screen).scrollTo({ top: 0 });
+}
+function goBack() {
+  const prev = state.nav.pop() || { screen: state.tab || 'home', viewUser: null, list: null };
+  Object.assign(state, prev);
+  render();
+}
 function openProfile(userId) {
   if (!userId) return;
   if (userId === backend.me.id) { state.screen = 'profile'; render(); return; }
-  if (state.screen !== 'user') state.backTo = state.screen;
-  state.viewUser = userId;
-  state.screen = 'user';
-  render();
-  $('#screen-user').scrollTo({ top: 0 });
+  navigate({ screen: 'user', viewUser: userId });
+}
+function openList(type, userId, handle) {
+  navigate({ screen: 'people', list: { type, userId, handle } });
 }
 // Tapping a name or avatar anywhere opens that person's profile.
 document.addEventListener('click', e => {
@@ -1234,10 +1250,83 @@ document.addEventListener('click', e => {
   if (!requestsSheet.hidden) closeRequests();
   openProfile(el.dataset.user);
 });
-$('#user-back').addEventListener('click', () => {
-  state.screen = state.backTo || 'home';
-  state.viewUser = null;
-  render();
+$('#user-back').addEventListener('click', goBack);
+$('#people-back').addEventListener('click', goBack);
+
+// Followers / Following counts open the lists.
+document.addEventListener('click', e => {
+  const stat = e.target.closest('[data-list]');
+  if (!stat) return;
+  if (stat.dataset.listOf === 'me') openList(stat.dataset.list, backend.me.id, backend.me.handle);
+  else if (state.viewUser) openList(stat.dataset.list, state.viewUser, $('#user-actions').dataset.handle);
+});
+document.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-list]')) { e.preventDefault(); e.target.click(); }
+});
+
+// ---------- Followers / following lists ----------
+let listSeq = 0;
+async function renderPeopleList() {
+  const seq = ++listSeq;
+  const { type, userId, handle } = state.list || {};
+  if (!type) return;
+  const mine = userId === backend.me.id;
+  $('#people-title').textContent = type === 'followers' ? 'Followers' : 'Following';
+  $('#people-sub').textContent = mine
+    ? (type === 'followers' ? 'People who can hear your followers-only memos.' : 'People whose memos show up on your Home.')
+    : '@' + (handle || '');
+  if (!$('#people-list').children.length || $('#people-list').dataset.key !== type + userId) {
+    $('#people-list').innerHTML = '<li class="empty">Loading…</li>';
+  }
+  let people;
+  try { people = type === 'followers' ? await backend.listFollowers(userId) : await backend.listFollowing(userId); }
+  catch (e) { if (seq === listSeq) $('#people-list').innerHTML = `<li class="empty">${esc(friendlyError(e))}</li>`; return; }
+  if (seq !== listSeq) return;
+  $('#people-list').dataset.key = type + userId;
+  people.forEach(p => {
+    if (p.following) state.following.add(p.id);
+    if (p.requested) state.requested.add(p.id);
+  });
+  const action = p => {
+    if (p.id === backend.me.id) return '';
+    if (mine && type === 'followers') return `<button class="follow-btn secondary" data-remove-follower="${esc(p.id)}" data-handle="${esc(p.handle)}">Remove</button>`;
+    if (p.blocked) return `<button class="unblock-btn" data-unblock="${esc(p.id)}">Unblock</button>`;
+    return followButtonHTML(p);
+  };
+  $('#people-list').innerHTML = people.length ? people.map(p => `
+    <li class="person" data-handle="${esc(p.handle)}">
+      <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
+      <div class="memo-who" data-user="${esc(p.id)}">
+        <div class="memo-name">${esc(p.name)}${p.id === backend.me.id ? ' (you)' : ''}</div>
+        <div class="memo-meta">@${esc(p.handle)}</div>
+      </div>
+      ${action(p)}
+    </li>`).join('') : `<li class="empty">${
+      mine ? (type === 'followers' ? 'No followers yet. Approved follow requests show up here.' : 'You’re not following anyone yet. Find people in Search or Discover.')
+        : (type === 'followers' ? 'No followers yet.' : 'Not following anyone yet.')}</li>`;
+}
+
+async function removeFollower(id, handle) {
+  const ok = await chooseAction(
+    `Remove @${handle} as a follower? They won’t be told, and they’ll need to ask again, and be approved, to hear your followers-only memos.`,
+    [{ key: 'remove', label: 'Remove follower', danger: true }]);
+  if (ok !== 'remove') return false;
+  try {
+    await backend.removeFollower(id);
+    toast(`Removed @${handle}`);
+    return true;
+  } catch (e) { toast(friendlyError(e)); return false; }
+}
+$('#people-list').addEventListener('click', async e => {
+  const rm = e.target.closest('[data-remove-follower]');
+  if (rm) {
+    if (await removeFollower(rm.dataset.removeFollower, rm.dataset.handle)) {
+      rm.closest('li').remove();
+      if (!$('#people-list li')) renderPeopleList();
+    }
+    return;
+  }
+  onPeopleClick(e);
 });
 
 let profileSeq = 0;
@@ -1275,6 +1364,7 @@ async function renderUserProfile() {
   $('#user-stat-followers').textContent = fmtCount(prof.followers);
   $('#user-stat-following').textContent = fmtCount(prof.following);
   $('#user-actions').dataset.handle = u.handle;
+  $('#user-actions').dataset.followsMe = String(!!u.followsMe);
   $('#user-actions').innerHTML = (u.blocked
     ? `<button class="unblock-btn" data-unblock="${esc(u.id)}">Unblock</button>`
     : followButtonHTML(u))
@@ -1293,12 +1383,15 @@ $('#user-actions').addEventListener('click', async e => {
   if (!e.target.closest('#user-more')) return;
   const prof = { id: state.viewUser, handle: $('#user-actions').dataset.handle };
   const blockedNow = !!$('#user-actions [data-unblock]');
+  const followsMe = $('#user-actions').dataset.followsMe === 'true';
   const key = await chooseAction(`@${prof.handle}`, [
+    ...(followsMe ? [{ key: 'remove', label: 'Remove follower', danger: true }] : []),
     { key: 'report', label: `Report @${prof.handle}`, danger: true },
     blockedNow ? { key: 'unblock', label: `Unblock @${prof.handle}` } : { key: 'block', label: `Block @${prof.handle}`, danger: true },
   ]);
   if (key === 'report') reportFlow({ type: 'user', targetId: prof.id, targetAuthorId: prof.id, memoId: '', text: '', author: prof });
   if (key === 'block') { await blockUser(prof); renderUserProfile(); }
+  if (key === 'remove' && await removeFollower(prof.id, prof.handle)) renderUserProfile();
   if (key === 'unblock') {
     try { await backend.unblock(prof.id); toast('Unblocked'); renderUserProfile(); refreshFeed(); }
     catch (err) { toast(friendlyError(err)); }
@@ -1365,6 +1458,55 @@ $('#request-list').addEventListener('click', async e => {
     btn.closest('.request-actions').querySelectorAll('button').forEach(b => { b.disabled = false; });
   }
 });
+
+// ---------- Pull to refresh ----------
+// Drag down from the top of a screen and let go to reload what's on it.
+const ptr = { el: $('#ptr'), startY: null, pull: 0, busy: false };
+const PTR_TRIGGER = 64;
+function ptrSet(pull) {
+  ptr.pull = pull;
+  ptr.el.style.setProperty('--pull', pull + 'px');
+  ptr.el.classList.toggle('is-pulling', pull > 4);
+  $('#ptr-text').textContent = pull >= PTR_TRIGGER ? 'Release to refresh' : 'Pull to refresh';
+}
+async function refreshCurrentScreen() {
+  const jobs = [refreshFeed()];
+  if (state.screen === 'user') jobs.push(renderUserProfile());
+  if (state.screen === 'people') jobs.push(renderPeopleList());
+  if (state.screen === 'search') jobs.push(renderSearch());
+  await Promise.allSettled(jobs);
+  if (state.screen === 'profile') renderProfile();
+}
+const screensRoot = document.querySelector('.screens');
+screensRoot.addEventListener('touchstart', e => {
+  const scr = e.target.closest('.screen');
+  if (ptr.busy || !scr || scr.scrollTop > 0 || e.touches.length !== 1) { ptr.startY = null; return; }
+  ptr.startY = e.touches[0].clientY;
+  ptr.el.classList.remove('is-settling');
+}, { passive: true });
+screensRoot.addEventListener('touchmove', e => {
+  if (ptr.startY == null) return;
+  const scr = e.target.closest('.screen');
+  const dy = e.touches[0].clientY - ptr.startY;
+  if (dy <= 0 || (scr && scr.scrollTop > 0)) { ptrSet(0); return; }
+  e.preventDefault(); // keep the page still while pulling
+  ptrSet(Math.min(110, dy * 0.5));
+}, { passive: false });
+screensRoot.addEventListener('touchend', async () => {
+  if (ptr.startY == null) return;
+  ptr.startY = null;
+  ptr.el.classList.add('is-settling');
+  if (ptr.pull < PTR_TRIGGER) { ptrSet(0); return; }
+  ptr.busy = true;
+  ptr.el.classList.add('is-refreshing');
+  ptrSet(56);
+  $('#ptr-text').textContent = 'Refreshing…';
+  await refreshCurrentScreen();
+  ptr.el.classList.remove('is-refreshing');
+  ptrSet(0);
+  ptr.busy = false;
+});
+screensRoot.addEventListener('touchcancel', () => { ptr.startY = null; ptr.el.classList.add('is-settling'); ptrSet(0); });
 
 // ---------- Account ----------
 const deleteSheet = $('#delete-sheet');
@@ -1498,7 +1640,7 @@ async function refreshFeed() {
     if (seq === feedSeq) toast(friendlyError(e));
   }
   state.loading = false;
-  if (sheet.hidden && cfSheet.hidden && commentsSheet.hidden && state.screen !== 'user') render();
+  if (sheet.hidden && cfSheet.hidden && commentsSheet.hidden && !['user', 'people'].includes(state.screen)) render();
 }
 
 function onSignedIn() {

@@ -186,11 +186,19 @@ export function createDemoBackend() {
     },
     async declineRequest(id) { incoming = incoming.filter(x => x !== id); prefs.set('incomingRequests', incoming); },
     async removeFollower(id) { if (byId[id]) byId[id].followsMe = false; },
+    async listFollowers(userId) {
+      const list = userId === me.id ? people.filter(p => p.followsMe) : people.filter(p => p.id !== userId).slice(0, 4);
+      return list.map(relation);
+    },
+    async listFollowing(userId) {
+      const list = userId === me.id ? people.filter(p => following.has(p.id)) : people.filter(p => p.id !== userId).slice(2, 6);
+      return list.map(relation);
+    },
     async getUserProfile(userId) {
       const user = byId[userId];
       const visible = blocked.has(userId) ? [] : memos.filter(m => m.userId === userId
         && (m.audience === 'global' || (m.audience === 'followers' && following.has(userId)) || m.audience === 'close'));
-      return { user: relation(user), followers: 40 + userId.charCodeAt(1) * 7, following: 25 + userId.charCodeAt(1) * 3, memos: visible.map(withAuthor) };
+      return { user: { ...relation(user), followsMe: !!user.followsMe }, followers: 40 + userId.charCodeAt(1) * 7, following: 25 + userId.charCodeAt(1) * 3, memos: visible.map(withAuthor) };
     },
     async unfollow(id) { following.delete(id); prefs.set('following', [...following]); },
 
@@ -243,6 +251,6 @@ export function createDemoBackend() {
     async getCloseFriends() { return new Set(closeIds); },
     async setCloseFriends(ids) { closeIds = new Set(ids); prefs.set('closeFriends', [...closeIds]); },
 
-    async stats() { return { followers: 248, following: following.size }; },
+    async stats() { return { followers: people.filter(p => p.followsMe).length, following: following.size }; },
   };
 }

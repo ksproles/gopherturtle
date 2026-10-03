@@ -30,6 +30,11 @@
     </nav>
   </header>
 
+  <!-- Pull to refresh indicator -->
+  <div class="ptr" id="ptr" aria-hidden="true">
+    <span class="ptr-spinner"></span><span class="ptr-text" id="ptr-text">Pull to refresh</span>
+  </div>
+
   <!-- Screens -->
   <main class="screens">
     <section class="screen" id="screen-home" aria-label="Home feed">
@@ -62,13 +67,22 @@
       </div>
       <dl class="stats">
         <div><dt>Memos</dt><dd id="user-stat-memos">–</dd></div>
-        <div><dt>Followers</dt><dd id="user-stat-followers">–</dd></div>
-        <div><dt>Following</dt><dd id="user-stat-following">–</dd></div>
+        <div class="stat-link" role="button" tabindex="0" data-list="followers" data-list-of="user"><dt>Followers</dt><dd id="user-stat-followers">–</dd></div>
+        <div class="stat-link" role="button" tabindex="0" data-list="following" data-list-of="user"><dt>Following</dt><dd id="user-stat-following">–</dd></div>
       </dl>
       <div class="user-actions" id="user-actions"></div>
       <p class="lock-note" id="user-note" hidden></p>
       <h2 class="section-title">Memos you can hear</h2>
       <ol class="feed" id="user-feed"></ol>
+    </section>
+
+    <section class="screen" id="screen-people" aria-labelledby="people-title" hidden>
+      <button class="back-btn" id="people-back">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>Back
+      </button>
+      <h2 class="list-title" id="people-title">Followers</h2>
+      <p class="list-sub" id="people-sub"></p>
+      <ul class="people" id="people-list"></ul>
     </section>
 
     <section class="screen" id="screen-search" aria-label="Search" hidden>
@@ -92,8 +106,8 @@
       </div>
       <dl class="stats">
         <div><dt>Memos</dt><dd id="stat-memos">0</dd></div>
-        <div><dt>Followers</dt><dd id="stat-followers">–</dd></div>
-        <div><dt>Following</dt><dd id="stat-following">–</dd></div>
+        <div class="stat-link" role="button" tabindex="0" data-list="followers" data-list-of="me"><dt>Followers</dt><dd id="stat-followers">–</dd></div>
+        <div class="stat-link" role="button" tabindex="0" data-list="following" data-list-of="me"><dt>Following</dt><dd id="stat-following">–</dd></div>
       </dl>
       <button class="plain-row requests-row" id="requests-open">
         <span>Follow requests</span>
