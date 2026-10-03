@@ -5,7 +5,8 @@
 //   users/{uid}                      public profile {name, nameLower, handle, color, createdAt}
 //   users/{uid}/private/closeFriends {uids: [...]}  readable by the owner only
 //   handles/{handle}                 {uid}  keeps handles unique
-//   follows/{follower_target}        {follower, target, createdAt}
+//   followRequests/{requester_target} {requester, target, createdAt}  pending follow requests
+//   follows/{follower_target}        {follower, target, createdAt}  created when the target approves
 //   memos/{memoId}                   {authorId, audience, createdAt, duration, caption, peaks, audioPath, likeCount}
 //   memos/{memoId}/likes/{uid}       {createdAt}
 //   feeds/{uid}/items/{memoId}       {authorId, audience, createdAt}  delivery of followers-only and close friends memos
@@ -70,6 +71,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
   let following = new Set();  // uids I follow
   let closeIds = new Set();   // my private close friends list
   let blocked = new Set();    // uids I've blocked
+  let requested = new Set();  // uids I've asked to follow (pending)
   const users = new Map();    // uid -> profile cache
   const memoCache = new Map();
 
@@ -86,18 +88,33 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     return u;
   }
 
+  // Who you follow and who you've asked to follow (someone may have approved,
+  // declined, removed you as a follower or blocked you since last time).
+  async function loadRelations() {
+    const id = uid();
+    const [fs, rq] = await Promise.all([
+      getDocs(query(collection(db, 'follows'), where('follower', '==', id))),
+      getDocs(query(collection(db, 'followRequests'), where('requester', '==', id))),
+    ]);
+    following = new Set(fs.docs.map(d => d.data().target));
+    requested = new Set(rq.docs.map(d => d.data().target));
+  }
+  const relationTo = u => ({
+    following: following.has(u.id), requested: requested.has(u.id),
+    close: closeIds.has(u.id), blocked: blocked.has(u.id),
+  });
+
   async function loadSelf() {
     const id = uid();
     const snap = await getDoc(doc(db, 'users', id));
     if (!snap.exists()) { me = null; return null; }
     me = { id, ...snap.data() };
     users.set(id, me);
-    const [fs, cf, bl] = await Promise.all([
-      getDocs(query(collection(db, 'follows'), where('follower', '==', id))),
+    const [, cf, bl] = await Promise.all([
+      loadRelations(),
       getDoc(doc(db, 'users', id, 'private', 'closeFriends')),
       getDocs(collection(db, 'users', id, 'blocked')),
     ]);
-    following = new Set(fs.docs.map(d => d.data().target));
     blocked = new Set(bl.docs.map(d => d.id));
     closeIds = new Set(cf.exists() ? cf.data().uids || [] : []);
     return me;
@@ -317,9 +334,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     async searchPeople(q) {
       q = q.trim().toLowerCase().replace(/^@/, '');
       const usersCol = collection(db, 'users');
-      // Refresh who you follow: someone may have removed you as a follower or blocked you.
-      const fs = await getDocs(query(collection(db, 'follows'), where('follower', '==', uid())));
-      following = new Set(fs.docs.map(d => d.data().target));
+      await loadRelations();
       let snaps;
       if (!q) {
         snaps = (await getDocs(query(usersCol, orderBy('createdAt', 'desc'), limit(25)))).docs;
@@ -338,13 +353,66 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
         .map(s => {
           const u = { id: s.id, ...s.data() };
           users.set(u.id, u);
-          return { ...u, following: following.has(u.id), close: closeIds.has(u.id), blocked: blocked.has(u.id) };
+          return { ...u, ...relationTo(u) };
         });
     },
 
+    // Ask to follow someone. They have to approve before you're a follower.
     async follow(target) {
-      await setDoc(doc(db, 'follows', `${uid()}_${target}`), { follower: uid(), target, createdAt: serverTimestamp() });
-      following.add(target);
+      await setDoc(doc(db, 'followRequests', `${uid()}_${target}`), { requester: uid(), target, createdAt: serverTimestamp() });
+      requested.add(target);
+      return 'requested';
+    },
+    async cancelRequest(target) {
+      await deleteDoc(doc(db, 'followRequests', `${uid()}_${target}`)).catch(e => {
+        if (e.code !== 'permission-denied') throw e; // already approved or declined
+      });
+      requested.delete(target);
+    },
+    async getRequested() { return new Set(requested); },
+
+    // Requests from people who want to follow you.
+    async listFollowRequests() {
+      const snap = await getDocs(query(collection(db, 'followRequests'), where('target', '==', uid()), limit(200)));
+      const list = await Promise.all(snap.docs
+        .filter(d => !blocked.has(d.data().requester))
+        .map(async d => ({ user: await getUser(d.data().requester), createdAt: toMs(d.data().createdAt) })));
+      return list.filter(r => r.user.handle !== 'deleted').sort((a, b) => b.createdAt - a.createdAt);
+    },
+    async approveRequest(requester) {
+      const id = uid();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'follows', `${requester}_${id}`), { follower: requester, target: id, createdAt: serverTimestamp() });
+      batch.delete(doc(db, 'followRequests', `${requester}_${id}`));
+      await batch.commit();
+      // Put your recent followers-only memos on their Home too.
+      const recent = await sortedQuery(collection(db, 'memos'), [where('authorId', '==', id), where('audience', '==', 'followers')], 20)
+        .catch(() => []);
+      await Promise.allSettled(recent.map(s => setDoc(doc(db, 'feeds', requester, 'items', s.id),
+        { authorId: id, audience: 'followers', createdAt: s.data().createdAt })));
+    },
+    async declineRequest(requester) {
+      await deleteDoc(doc(db, 'followRequests', `${requester}_${uid()}`));
+    },
+    async removeFollower(follower) {
+      await deleteDoc(doc(db, 'follows', `${follower}_${uid()}`));
+    },
+
+    // Someone's profile, showing only the memos you're allowed to hear.
+    async getUserProfile(userId) {
+      await loadRelations();
+      const user = await getUser(userId);
+      const memosCol = collection(db, 'memos');
+      const [followers, followingCount, ...lists] = await Promise.all([
+        getCountFromServer(query(collection(db, 'follows'), where('target', '==', userId))).then(c => c.data().count).catch(() => 0),
+        getCountFromServer(query(collection(db, 'follows'), where('follower', '==', userId))).then(c => c.data().count).catch(() => 0),
+        // Each list is allowed or refused by the rules on its own: public for everyone,
+        // followers-only for approved followers, close friends for people on their list.
+        ...['global', 'followers', 'close'].map(aud =>
+          sortedQuery(memosCol, [where('authorId', '==', userId), where('audience', '==', aud)], 50).catch(() => [])),
+      ]);
+      const memos = blocked.has(userId) ? [] : await Promise.all(lists.flat().map(toMemo));
+      return { user: { ...user, ...relationTo(user) }, followers, following: followingCount, memos };
     },
     async unfollow(target) {
       await deleteDoc(doc(db, 'follows', `${uid()}_${target}`)).catch(e => {
@@ -390,7 +458,10 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       await Promise.allSettled([
         deleteDoc(doc(db, 'follows', `${id}_${target}`)),
         deleteDoc(doc(db, 'follows', `${target}_${id}`)),
+        deleteDoc(doc(db, 'followRequests', `${id}_${target}`)),
+        deleteDoc(doc(db, 'followRequests', `${target}_${id}`)),
       ]);
+      requested.delete(target);
       following.delete(target);
       if (closeIds.has(target)) await api.setCloseFriends([...closeIds].filter(x => x !== target));
     },
@@ -403,7 +474,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       return list.sort((a, b) => a.name.localeCompare(b.name));
     },
 
-    async getFollowing() { return new Set(following); },
+    async getFollowing() { await loadRelations().catch(() => {}); return new Set(following); },
 
     // Signals for ranking Discover: who the people you follow follow.
     async discoverSignals() {
@@ -423,7 +494,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       const top = [...fof.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 10);
       const suggestions = (await Promise.all(top.map(([u]) => getUser(u))))
         .filter(u => u.handle !== 'deleted')
-        .map(u => ({ ...u, following: false, close: closeIds.has(u.id), blocked: false }));
+        .map(u => ({ ...u, ...relationTo(u) }));
       return {
         following: new Set(following),
         fof: new Map([...fof].map(([u, fs]) => [u, fs.map(f => names.get(f) || 'someone')])),
@@ -438,7 +509,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       return list
         .filter(u => u.handle !== 'deleted')
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map(u => ({ ...u, following: following.has(u.id), close: closeIds.has(u.id) }));
+        .map(u => ({ ...u, ...relationTo(u) }));
     },
     async getCloseFriends() { return new Set(closeIds); },
     async setCloseFriends(ids) {
@@ -459,12 +530,14 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       const id = user.uid;
       const mine = await getDocs(query(collection(db, 'memos'), where('authorId', '==', id)));
       for (const s of mine.docs) await api.deleteMemo({ id: s.id, audioPath: s.data().audioPath });
-      const [out, inc, inbox] = await Promise.all([
+      const [out, inc, inbox, reqOut, reqIn] = await Promise.all([
         getDocs(query(collection(db, 'follows'), where('follower', '==', id))),
         getDocs(query(collection(db, 'follows'), where('target', '==', id))),
         getDocs(collection(db, 'feeds', id, 'items')),
+        getDocs(query(collection(db, 'followRequests'), where('requester', '==', id))),
+        getDocs(query(collection(db, 'followRequests'), where('target', '==', id))),
       ]);
-      await Promise.all([...out.docs, ...inc.docs, ...inbox.docs].map(s => deleteDoc(s.ref)));
+      await Promise.all([...out.docs, ...inc.docs, ...inbox.docs, ...reqOut.docs, ...reqIn.docs].map(s => deleteDoc(s.ref)));
       await deleteDoc(doc(db, 'users', id, 'private', 'closeFriends'));
       const myAmps = await getDocs(query(collection(db, 'amplifies'), where('uid', '==', id)));
       for (const a of myAmps.docs) {

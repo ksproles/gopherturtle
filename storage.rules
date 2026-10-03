@@ -4,15 +4,25 @@ rules_version = '2';
 // rules as reading the memo in Firestore.
 service firebase.storage {
   match /b/{bucket}/o {
+    function memoData(memoId) {
+      return firestore.get(/databases/(default)/documents/memos/$(memoId)).data;
+    }
+    function canHear(m, author) {
+      return m.audience == 'global'
+        || (m.audience == 'followers'
+            && firestore.exists(/databases/(default)/documents/follows/$(request.auth.uid + '_' + author)))
+        || (m.audience == 'close'
+            && request.auth.uid in firestore.get(/databases/(default)/documents/users/$(author)/private/closeFriends).data.uids);
+    }
+
     match /audio/{uid}/{memoId} {
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.size < 25 * 1024 * 1024
         && request.resource.contentType.matches('audio/.*');
       allow delete: if request.auth != null && request.auth.uid == uid;
+      // Same rule as hearing the memo in Firestore (see canHear in firestore.rules).
       allow read: if request.auth != null && (
-        request.auth.uid == uid
-        || firestore.get(/databases/(default)/documents/memos/$(memoId)).data.audience == 'global'
-        || firestore.exists(/databases/(default)/documents/feeds/$(request.auth.uid)/items/$(memoId)));
+        request.auth.uid == uid || canHear(memoData(memoId), uid));
     }
   }
 }

@@ -49,6 +49,28 @@
       <ol class="feed" id="discover-feed"></ol>
     </section>
 
+    <section class="screen" id="screen-user" aria-label="Profile" hidden>
+      <button class="back-btn" id="user-back">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>Back
+      </button>
+      <div class="profile-head">
+        <div class="avatar avatar-lg" id="user-avatar"></div>
+        <div class="profile-who">
+          <h2 class="profile-name" id="user-name"></h2>
+          <p class="profile-handle" id="user-handle"></p>
+        </div>
+      </div>
+      <dl class="stats">
+        <div><dt>Memos</dt><dd id="user-stat-memos">–</dd></div>
+        <div><dt>Followers</dt><dd id="user-stat-followers">–</dd></div>
+        <div><dt>Following</dt><dd id="user-stat-following">–</dd></div>
+      </dl>
+      <div class="user-actions" id="user-actions"></div>
+      <p class="lock-note" id="user-note" hidden></p>
+      <h2 class="section-title">Memos you can hear</h2>
+      <ol class="feed" id="user-feed"></ol>
+    </section>
+
     <section class="screen" id="screen-search" aria-label="Search" hidden>
       <label class="search-box">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -73,6 +95,11 @@
         <div><dt>Followers</dt><dd id="stat-followers">–</dd></div>
         <div><dt>Following</dt><dd id="stat-following">–</dd></div>
       </dl>
+      <button class="plain-row requests-row" id="requests-open">
+        <span>Follow requests</span>
+        <span class="count-pill" id="requests-count" hidden></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
       <button class="private-row" id="cf-open" data-aud="close">
         <span class="private-dot"></span>
         <span class="private-text">
@@ -123,6 +150,7 @@
     </button>
     <button class="tab" data-screen="profile" aria-label="Profile">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span class="tab-badge" id="tab-badge" hidden></span>
       <span>Profile</span>
     </button>
   </nav>
@@ -204,6 +232,18 @@
       <input id="comment-input" type="text" maxlength="280" placeholder="Add a riff…" autocomplete="off" enterkeyhint="send">
       <button class="send-btn" id="comment-send" type="submit" disabled>Post</button>
     </form>
+  </section>
+
+  <!-- Follow requests -->
+  <section class="sheet" id="requests-sheet" role="dialog" aria-modal="true" aria-labelledby="requests-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <span class="sheet-spacer"></span>
+      <h2 id="requests-title">Follow requests</h2>
+      <button class="text-btn text-btn-end" id="requests-done">Done</button>
+    </header>
+    <p class="form-text sheet-note">People you approve can hear your followers-only memos, including ones you posted before. They can’t hear close friends memos unless you add them to your list.</p>
+    <ul class="people" id="request-list"></ul>
   </section>
 
   <!-- Blocked people -->

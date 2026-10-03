@@ -43,6 +43,11 @@ const state = {
   query: '',
   closeCount: 0,
   following: new Set(),   // people you follow
+  requested: new Set(),   // people you've asked to follow (waiting for approval)
+  requests: [],           // people asking to follow you
+  viewUser: null,         // whose profile is open
+  backTo: 'home',         // screen to return to from a profile
+  profileMemos: [],       // memos shown on someone else's profile
   signals: null,          // Discover ranking data from the backend
   rate: SPEEDS.includes(prefs.get('rate', 1)) ? prefs.get('rate', 1) : 1,
 };
@@ -108,8 +113,8 @@ function memoHTML(m, reason) {
   return `
     <li class="memo" data-aud="${m.audience}" data-id="${m.id}">
       <div class="memo-head">
-        <div class="avatar" style="--av:${u.color}">${esc(initials(u.name))}</div>
-        <div class="memo-who">
+        <div class="avatar" style="--av:${u.color}" data-user="${esc(u.id)}">${esc(initials(u.name))}</div>
+        <div class="memo-who" data-user="${esc(u.id)}">
           <div class="memo-name">${esc(u.name)}</div>
           <div class="memo-meta">@${esc(u.handle)} · ${timeAgo(m.createdAt)}</div>
         </div>
@@ -146,6 +151,10 @@ function renderList(el, memos, emptyText, reasons) {
     ? memos.map(m => memoHTML(m, reasons && reasons.get(m.id))).join('')
     : `<li class="empty">${emptyText}</li>`;
   if (player.memo) markPlaying(player.memo.id, true);
+}
+
+function findMemo(id) {
+  return state.memos.find(x => x.id === id) || state.profileMemos.find(x => x.id === id);
 }
 
 function sorted(list) {
@@ -225,16 +234,24 @@ function rankDiscover(memos) {
   }).sort((a, b) => b.score - a.score);
 }
 
+function followButtonHTML(p) {
+  const state_ = p.following ? 'following' : p.requested ? 'requested' : 'none';
+  const label = { following: 'Following', requested: 'Requested', none: 'Follow' }[state_];
+  return `<button class="follow-btn" data-follow="${esc(p.id)}" data-state="${state_}">${label}</button>`;
+}
+
 function renderSuggestions() {
   const box = $('#suggestions');
-  const people = ((state.signals && state.signals.suggestions) || []).filter(p => !state.following.has(p.id));
+  const people = ((state.signals && state.signals.suggestions) || [])
+    .filter(p => !state.following.has(p.id))
+    .map(p => ({ ...p, requested: state.requested.has(p.id) }));
   box.hidden = !people.length;
   $('#suggestion-list').innerHTML = people.map(p => `
     <li class="suggestion">
-      <div class="avatar" style="--av:${esc(p.color)}">${esc(initials(p.name))}</div>
-      <div class="suggestion-name">${esc(p.name)}</div>
+      <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
+      <div class="suggestion-name" data-user="${esc(p.id)}">${esc(p.name)}</div>
       <div class="suggestion-why">${esc(followedByText((state.signals.fof.get(p.id) || []).slice(0, 3)))}</div>
-      <button class="follow-btn" data-follow="${esc(p.id)}" aria-pressed="false">Follow</button>
+      ${followButtonHTML(p)}
     </li>`).join('');
 }
 
@@ -260,14 +277,14 @@ async function renderSearch() {
   if (seq !== searchSeq) return;
   $('#people').innerHTML = people.length ? people.map(p => `
     <li class="person" data-uid="${esc(p.id)}">
-      <div class="avatar" style="--av:${esc(p.color)}">${esc(initials(p.name))}</div>
-      <div class="memo-who">
+      <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
+      <div class="memo-who" data-user="${esc(p.id)}">
         <div class="memo-name">${esc(p.name)}</div>
         <div class="memo-meta">@${esc(p.handle)}${p.close ? ' · <span class="cf-tag">Close friend</span>' : ''}</div>
       </div>
       ${p.blocked
         ? `<button class="unblock-btn" data-unblock="${esc(p.id)}">Unblock</button>`
-        : `<button class="follow-btn" data-follow="${esc(p.id)}" aria-pressed="${p.following}">${p.following ? 'Following' : 'Follow'}</button>`}
+        : followButtonHTML(p)}
     </li>`).join('') : `<li class="empty">${q ? 'No people match.' : 'No one else is here yet.'}</li>`;
 
   const memos = sorted(state.memos.filter(m => {
@@ -304,12 +321,14 @@ function renderProfile() {
 function render() {
   app.dataset.screen = state.screen;
   document.querySelectorAll('.screen').forEach(s => { s.hidden = s.id !== 'screen-' + state.screen; });
+  const activeTab = state.screen === 'user' ? state.backTo : state.screen;
   document.querySelectorAll('.tab[data-screen]').forEach(t =>
-    t.classList.toggle('is-active', t.dataset.screen === state.screen));
+    t.classList.toggle('is-active', t.dataset.screen === activeTab));
   if (state.screen === 'home') renderHome();
   if (state.screen === 'discover') renderDiscover();
   if (state.screen === 'search') renderSearch();
   if (state.screen === 'profile') renderProfile();
+  if (state.screen === 'user') renderUserProfile();
 }
 
 // ---------- Playback ----------
@@ -337,7 +356,7 @@ function paintProgress(id, frac) {
     const bars = card.querySelectorAll('.wave i');
     const lit = Math.round(frac * bars.length);
     bars.forEach((b, i) => b.classList.toggle('on', i < lit));
-    const m = state.memos.find(x => x.id === id);
+    const m = findMemo(id);
     card.querySelector('.dur').textContent = frac > 0 && m
       ? fmtDur(m.duration * (1 - frac) / state.rate)
       : fmtDur(m ? m.duration : 0);
@@ -409,7 +428,7 @@ audio.addEventListener('ended', () => {
     const next = card && card.nextElementSibling;
     if (next && next.dataset.id) {
       next.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const nm = state.memos.find(x => x.id === next.dataset.id);
+      const nm = findMemo(next.dataset.id);
       if (nm) togglePlay(nm);
     }
   }
@@ -787,7 +806,7 @@ document.querySelector('.screens').addEventListener('click', e => {
   const btn = e.target.closest('[data-act]');
   if (!btn) return;
   const card = btn.closest('.memo');
-  const m = card && state.memos.find(x => x.id === card.dataset.id);
+  const m = card && findMemo(card.dataset.id);
   if (!m) return;
   const act = btn.dataset.act;
   if (act === 'play') {
@@ -874,23 +893,52 @@ async function onPeopleClick(e) {
     try {
       await backend.unblock(unblockBtn.dataset.unblock);
       toast('Unblocked');
-      renderSearch();
+      if (state.screen === 'user') renderUserProfile(); else renderSearch();
       refreshFeed();
     } catch (err) { toast(friendlyError(err)); }
     return;
   }
   const btn = e.target.closest('[data-follow]');
-  if (!btn) return;
+  if (btn) followButtonClicked(btn);
+}
+
+// Follow → Requested (until they approve) → Following.
+function paintFollowButtons(id, state_) {
+  document.querySelectorAll(`[data-follow="${CSS.escape(id)}"]`).forEach(b => {
+    b.dataset.state = state_;
+    b.textContent = { following: 'Following', requested: 'Requested', none: 'Follow' }[state_];
+  });
+}
+async function followButtonClicked(btn) {
   const id = btn.dataset.follow;
-  const on = btn.getAttribute('aria-pressed') !== 'true';
+  const current = btn.dataset.state || 'none';
+  const name = (btn.closest('[data-handle]') || {}).dataset?.handle;
   btn.disabled = true;
   try {
-    if (on) await backend.follow(id); else await backend.unfollow(id);
-    btn.setAttribute('aria-pressed', String(on));
-    btn.textContent = on ? 'Following' : 'Follow';
+    if (current === 'none') {
+      const result = await backend.follow(id);
+      if (result === 'following') state.following.add(id); else state.requested.add(id);
+      paintFollowButtons(id, result === 'following' ? 'following' : 'requested');
+      toast(result === 'following' ? 'Following' : 'Request sent');
+    } else if (current === 'requested') {
+      await backend.cancelRequest(id);
+      state.requested.delete(id);
+      paintFollowButtons(id, 'none');
+      toast('Request canceled');
+    } else {
+      const ok = await chooseAction(
+        `Unfollow${name ? ' @' + name : ''}? You’ll need to ask again, and be approved, to hear their followers-only memos.`,
+        [{ key: 'unfollow', label: 'Unfollow', danger: true }]);
+      if (ok === 'unfollow') {
+        await backend.unfollow(id);
+        state.following.delete(id);
+        paintFollowButtons(id, 'none');
+      }
+    }
+    if (state.screen === 'user') renderUserProfile();
     refreshFeed();
   } catch (err) {
-    toast(on && err && err.code === 'permission-denied' ? 'You can’t follow this account.' : friendlyError(err));
+    toast(err && err.code === 'permission-denied' ? 'You can’t follow this account.' : friendlyError(err));
   }
   btn.disabled = false;
 }
@@ -917,6 +965,7 @@ backdrop.addEventListener('click', () => {
   else if (!deleteSheet.hidden) closeDeleteSheet();
   else if (!commentsSheet.hidden) closeComments();
   else if (!blockedSheet.hidden) closeBlocked();
+  else if (!requestsSheet.hidden) closeRequests();
   else closeSheet();
 });
 document.addEventListener('keydown', e => {
@@ -925,6 +974,7 @@ document.addEventListener('keydown', e => {
   else if (!actionSheet.hidden) closeActions(null);
   else if (!commentsSheet.hidden) closeComments();
   else if (!blockedSheet.hidden) closeBlocked();
+  else if (!requestsSheet.hidden) closeRequests();
   else if (!cfSheet.hidden) closeCloseFriends();
   else if (!deleteSheet.hidden) closeDeleteSheet();
   else if (!sheet.hidden) closeSheet();
@@ -1032,9 +1082,9 @@ function commentHTML(c) {
   const u = c.author;
   return `
     <li class="comment" data-cid="${esc(c.id)}">
-      <div class="avatar" style="--av:${esc(u.color)}">${esc(initials(u.name))}</div>
+      <div class="avatar" style="--av:${esc(u.color)}" data-user="${esc(u.id)}">${esc(initials(u.name))}</div>
       <div class="comment-body">
-        <div class="comment-meta"><b>${esc(u.name)}</b> · ${timeAgo(c.createdAt)}</div>
+        <div class="comment-meta"><b data-user="${esc(u.id)}">${esc(u.name)}</b> · ${timeAgo(c.createdAt)}</div>
         <p class="comment-text">${esc(filterText(c.text))}</p>
       </div>
       <button class="more-btn" data-cmore="${esc(c.id)}" aria-label="More options for this riff">${ICON_MORE}</button>
@@ -1166,6 +1216,156 @@ $('#blocked-list').addEventListener('click', async e => {
   } catch (err) { toast(friendlyError(err)); b.disabled = false; }
 });
 
+// ---------- Other people's profiles ----------
+function openProfile(userId) {
+  if (!userId) return;
+  if (userId === backend.me.id) { state.screen = 'profile'; render(); return; }
+  if (state.screen !== 'user') state.backTo = state.screen;
+  state.viewUser = userId;
+  state.screen = 'user';
+  render();
+  $('#screen-user').scrollTo({ top: 0 });
+}
+// Tapping a name or avatar anywhere opens that person's profile.
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-user]');
+  if (!el || e.target.closest('button:not([data-user]), input, label')) return;
+  if (!commentsSheet.hidden) closeComments();
+  if (!requestsSheet.hidden) closeRequests();
+  openProfile(el.dataset.user);
+});
+$('#user-back').addEventListener('click', () => {
+  state.screen = state.backTo || 'home';
+  state.viewUser = null;
+  render();
+});
+
+let profileSeq = 0;
+async function renderUserProfile() {
+  const seq = ++profileSeq;
+  const userId = state.viewUser;
+  if (!userId) return;
+  if (!$('#user-feed').dataset.uid || $('#user-feed').dataset.uid !== userId) {
+    $('#user-name').textContent = '';
+    $('#user-handle').textContent = '';
+    $('#user-avatar').textContent = '';
+    $('#user-actions').innerHTML = '';
+    $('#user-note').hidden = true;
+    $('#user-feed').innerHTML = '<li class="empty">Loading…</li>';
+    ['memos', 'followers', 'following'].forEach(k => { $('#user-stat-' + k).textContent = '–'; });
+  }
+  let prof;
+  try { prof = await backend.getUserProfile(userId); }
+  catch (e) {
+    if (seq === profileSeq) $('#user-feed').innerHTML = `<li class="empty">${esc(friendlyError(e))}</li>`;
+    return;
+  }
+  if (seq !== profileSeq || state.viewUser !== userId) return;
+  const u = prof.user;
+  // The profile comes with fresh follow status (they may have approved or declined).
+  if (u.following) state.following.add(u.id); else state.following.delete(u.id);
+  if (u.requested) state.requested.add(u.id); else state.requested.delete(u.id);
+  $('#user-feed').dataset.uid = userId;
+  $('#user-avatar').style.setProperty('--av', u.color);
+  $('#user-avatar').textContent = initials(u.name);
+  $('#user-name').textContent = u.name;
+  $('#user-handle').textContent = '@' + u.handle;
+  state.profileMemos = prof.memos;
+  $('#user-stat-memos').textContent = fmtCount(prof.memos.filter(m => m.audience !== 'close').length);
+  $('#user-stat-followers').textContent = fmtCount(prof.followers);
+  $('#user-stat-following').textContent = fmtCount(prof.following);
+  $('#user-actions').dataset.handle = u.handle;
+  $('#user-actions').innerHTML = (u.blocked
+    ? `<button class="unblock-btn" data-unblock="${esc(u.id)}">Unblock</button>`
+    : followButtonHTML(u))
+    + `<button class="more-btn" id="user-more" aria-label="More options for @${esc(u.handle)}">${ICON_MORE}</button>`;
+  const note = u.blocked ? `You blocked @${u.handle}.`
+    : u.following ? ''
+    : u.requested ? `Request sent. Once @${u.handle} approves, you’ll hear their followers-only memos too.`
+    : `You can hear @${u.handle}’s public memos. Follow to ask for their followers-only memos; they’ll need to approve.`;
+  $('#user-note').textContent = note;
+  $('#user-note').hidden = !note;
+  renderList($('#user-feed'), sorted(prof.memos),
+    u.blocked ? 'Unblock to see their memos.' : `No memos you can hear from @${esc(u.handle)} yet.`);
+}
+$('#user-actions').addEventListener('click', async e => {
+  if (e.target.closest('[data-follow], [data-unblock]')) { onPeopleClick(e); return; }
+  if (!e.target.closest('#user-more')) return;
+  const prof = { id: state.viewUser, handle: $('#user-actions').dataset.handle };
+  const blockedNow = !!$('#user-actions [data-unblock]');
+  const key = await chooseAction(`@${prof.handle}`, [
+    { key: 'report', label: `Report @${prof.handle}`, danger: true },
+    blockedNow ? { key: 'unblock', label: `Unblock @${prof.handle}` } : { key: 'block', label: `Block @${prof.handle}`, danger: true },
+  ]);
+  if (key === 'report') reportFlow({ type: 'user', targetId: prof.id, targetAuthorId: prof.id, memoId: '', text: '', author: prof });
+  if (key === 'block') { await blockUser(prof); renderUserProfile(); }
+  if (key === 'unblock') {
+    try { await backend.unblock(prof.id); toast('Unblocked'); renderUserProfile(); refreshFeed(); }
+    catch (err) { toast(friendlyError(err)); }
+  }
+});
+
+// ---------- Follow requests ----------
+const requestsSheet = $('#requests-sheet');
+function paintRequestBadge() {
+  const n = state.requests.length;
+  $('#tab-badge').hidden = !n;
+  $('#requests-count').hidden = !n;
+  $('#requests-count').textContent = n;
+}
+async function loadRequests() {
+  try { state.requests = await backend.listFollowRequests(); }
+  catch (e) { console.warn('Could not load follow requests', e); }
+  paintRequestBadge();
+}
+function renderRequests() {
+  $('#request-list').innerHTML = state.requests.length ? state.requests.map(r => `
+    <li class="person">
+      <div class="avatar" style="--av:${esc(r.user.color)}" data-user="${esc(r.user.id)}">${esc(initials(r.user.name))}</div>
+      <div class="memo-who" data-user="${esc(r.user.id)}">
+        <div class="memo-name">${esc(r.user.name)}</div>
+        <div class="memo-meta">@${esc(r.user.handle)} · ${timeAgo(r.createdAt)}</div>
+      </div>
+      <div class="request-actions">
+        <button class="follow-btn" data-approve="${esc(r.user.id)}">Approve</button>
+        <button class="follow-btn secondary" data-decline="${esc(r.user.id)}">Decline</button>
+      </div>
+    </li>`).join('') : '<li class="empty">No follow requests right now.</li>';
+}
+async function openRequests() {
+  requestsSheet.hidden = false;
+  backdrop.hidden = false;
+  renderRequests();
+  await loadRequests();
+  if (!requestsSheet.hidden) renderRequests();
+}
+function closeRequests() {
+  requestsSheet.hidden = true;
+  backdrop.hidden = true;
+  render();
+}
+$('#requests-open').addEventListener('click', openRequests);
+$('#requests-done').addEventListener('click', closeRequests);
+$('#request-list').addEventListener('click', async e => {
+  const approve = e.target.closest('[data-approve]');
+  const decline = e.target.closest('[data-decline]');
+  const btn = approve || decline;
+  if (!btn) return;
+  const id = btn.dataset.approve || btn.dataset.decline;
+  const r = state.requests.find(x => x.user.id === id);
+  btn.closest('.request-actions').querySelectorAll('button').forEach(b => { b.disabled = true; });
+  try {
+    if (approve) await backend.approveRequest(id); else await backend.declineRequest(id);
+    state.requests = state.requests.filter(x => x.user.id !== id);
+    renderRequests();
+    paintRequestBadge();
+    toast(approve ? `@${r.user.handle} can now hear your followers-only memos` : 'Request declined');
+  } catch (err) {
+    toast(friendlyError(err));
+    btn.closest('.request-actions').querySelectorAll('button').forEach(b => { b.disabled = false; });
+  }
+});
+
 // ---------- Account ----------
 const deleteSheet = $('#delete-sheet');
 function openDeleteSheet() {
@@ -1283,6 +1483,8 @@ async function refreshFeed() {
   const seq = ++feedSeq;
   try {
     const following = await backend.getFollowing();
+    state.requested = await backend.getRequested();
+    loadRequests();
     const [memos, signals] = await Promise.all([
       backend.loadFeed(),
       backend.discoverSignals().catch(e => { console.warn('Discover signals unavailable', e); return null; }),
@@ -1296,7 +1498,7 @@ async function refreshFeed() {
     if (seq === feedSeq) toast(friendlyError(e));
   }
   state.loading = false;
-  if (sheet.hidden && cfSheet.hidden && commentsSheet.hidden) render();
+  if (sheet.hidden && cfSheet.hidden && commentsSheet.hidden && state.screen !== 'user') render();
 }
 
 function onSignedIn() {

@@ -65,9 +65,53 @@ await test('you cannot change your handle by editing your profile', async () => 
   await assertFails(updateDoc(doc(db('alice'), 'users', 'alice'), { handle: 'bob' }));
 });
 
-console.log('Follows');
-await test('alice can follow bob', async () => {
-  await assertSucceeds(setDoc(doc(db('alice'), 'follows', 'alice_bob'), { follower: 'alice', target: 'bob', createdAt: serverTimestamp() }));
+console.log('Follow requests');
+const request = (from, to) => setDoc(doc(db(from), 'followRequests', `${from}_${to}`), { requester: from, target: to, createdAt: serverTimestamp() });
+function approve(target, follower) {
+  const d = db(target);
+  const b = writeBatch(d);
+  b.set(doc(d, 'follows', `${follower}_${target}`), { follower, target, createdAt: serverTimestamp() });
+  b.delete(doc(d, 'followRequests', `${follower}_${target}`));
+  return b.commit();
+}
+await test('you cannot follow someone without their approval', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'follows', 'alice_bob'), { follower: 'alice', target: 'bob', createdAt: serverTimestamp() }));
+});
+await test('alice can ask to follow bob', async () => {
+  await assertSucceeds(request('alice', 'bob'));
+});
+await test('you cannot send a request for someone else, or to yourself', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'followRequests', 'carol_bob'), { requester: 'carol', target: 'bob', createdAt: serverTimestamp() }));
+  await assertFails(request('alice', 'alice'));
+});
+await test('only the two people involved can see a request', async () => {
+  await assertSucceeds(getDoc(doc(db('bob'), 'followRequests', 'alice_bob')));
+  await assertSucceeds(getDoc(doc(db('alice'), 'followRequests', 'alice_bob')));
+  await assertFails(getDoc(doc(db('carol'), 'followRequests', 'alice_bob')));
+  await assertSucceeds(getDocs(query(collection(db('bob'), 'followRequests'), where('target', '==', 'bob'))));
+  await assertFails(getDocs(query(collection(db('carol'), 'followRequests'), where('target', '==', 'bob'))));
+});
+await test('the requester cannot approve their own request', async () => {
+  const d = db('alice');
+  const b = writeBatch(d);
+  b.set(doc(d, 'follows', 'alice_bob'), { follower: 'alice', target: 'bob', createdAt: serverTimestamp() });
+  b.delete(doc(d, 'followRequests', 'alice_bob'));
+  await assertFails(b.commit());
+});
+await test('bob cannot add a follower who never asked', async () => {
+  await assertFails(approve('bob', 'dave'));
+});
+await test('bob approves alice', async () => {
+  await assertSucceeds(approve('bob', 'alice'));
+});
+await test('you cannot request someone you already follow', async () => {
+  await assertFails(request('alice', 'bob'));
+});
+await test('requests can be cancelled or declined', async () => {
+  await assertSucceeds(request('carol', 'alice'));
+  await assertSucceeds(deleteDoc(doc(db('carol'), 'followRequests', 'carol_alice')));
+  await assertSucceeds(request('carol', 'alice'));
+  await assertSucceeds(deleteDoc(doc(db('alice'), 'followRequests', 'carol_alice')));
 });
 await test('you cannot make someone else follow a person', async () => {
   await assertFails(setDoc(doc(db('alice'), 'follows', 'carol_bob'), { follower: 'carol', target: 'bob', createdAt: serverTimestamp() }));
@@ -130,13 +174,26 @@ console.log('Who can hear what');
 await test('global memos: anyone signed in', async () => {
   await assertSucceeds(getDoc(doc(db('carol'), 'memos', 'm-global')));
 });
-await test('followers-only memos: followers it was delivered to', async () => {
+await test('followers-only memos: approved followers', async () => {
   await assertSucceeds(getDoc(doc(db('alice'), 'memos', 'm-followers')));
   await assertFails(getDoc(doc(db('carol'), 'memos', 'm-followers')));
 });
 await test('close friends memos: only people on the list', async () => {
   await assertSucceeds(getDoc(doc(db('carol'), 'memos', 'm-close')));
   await assertFails(getDoc(doc(db('alice'), 'memos', 'm-close')));
+});
+await test('on a profile, approved followers can load followers-only memos, others cannot', async () => {
+  const q = d => query(collection(d, 'memos'), where('authorId', '==', 'bob'), where('audience', '==', 'followers'), orderBy('createdAt', 'desc'));
+  await assertSucceeds(getDocs(q(db('alice'))));
+  await assertFails(getDocs(q(db('carol'))));
+});
+await test('on a profile, close friends can load close friends memos, others cannot', async () => {
+  const q = d => query(collection(d, 'memos'), where('authorId', '==', 'bob'), where('audience', '==', 'close'), orderBy('createdAt', 'desc'));
+  await assertSucceeds(getDocs(q(db('carol'))));
+  await assertFails(getDocs(q(db('alice'))));
+});
+await test('anyone can load someone’s public memos on their profile', async () => {
+  await assertSucceeds(getDocs(query(collection(db('dave'), 'memos'), where('authorId', '==', 'bob'), where('audience', '==', 'global'), orderBy('createdAt', 'desc'))));
 });
 await test('the feed queries the app makes are allowed', async () => {
   const d = db('carol');
@@ -300,8 +357,8 @@ await test('you can block someone and only you can see your block list', async (
 await test('blocked people cannot comment on your memos', async () => {
   await assertFails(setDoc(doc(db('carol'), 'memos', 'm-global', 'comments', 'c8'), comment('carol')));
 });
-await test('blocked people cannot follow you', async () => {
-  await assertFails(setDoc(doc(db('carol'), 'follows', 'carol_bob'), { follower: 'carol', target: 'bob', createdAt: serverTimestamp() }));
+await test('blocked people cannot ask to follow you', async () => {
+  await assertFails(request('carol', 'bob'));
 });
 await test('blocked people cannot send you memos', async () => {
   await assertSucceeds(setDoc(doc(db('carol'), 'memos', 'cm'), memoData('carol', 'cm', 'followers')));
@@ -317,6 +374,10 @@ await test('after unblocking, they can comment again', async () => {
 console.log('Leaving');
 await test('bob can remove alice as a follower', async () => {
   await assertSucceeds(deleteDoc(doc(db('bob'), 'follows', 'alice_bob')));
+});
+await test('once removed, alice can no longer hear bob’s followers-only memos or audio', async () => {
+  await assertFails(getDoc(doc(db('alice'), 'memos', 'm-followers')));
+  await assertFails(getBytes(ref(st('alice'), 'audio/bob/m-followers')));
 });
 await test('the author can delete a memo', async () => {
   await assertSucceeds(deleteDoc(doc(db('bob'), 'memos', 'm-followers')));

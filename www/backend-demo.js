@@ -110,7 +110,9 @@ export function createDemoBackend() {
   let mineLoaded = false;
 
   const withAuthor = m => ({ ...m, author: byId[m.userId] || me, comments: (comments[m.id] || []).length });
-  const relation = p => ({ ...p, following: following.has(p.id), close: closeIds.has(p.id), blocked: blocked.has(p.id) });
+  const relation = p => ({ ...p, following: following.has(p.id), requested: false, close: closeIds.has(p.id), blocked: blocked.has(p.id) });
+  // One example request so the approve/decline screen has something in it.
+  let incoming = prefs.get('incomingRequests', ['u7']);
 
   return {
     mode: 'demo',
@@ -171,7 +173,25 @@ export function createDemoBackend() {
         .filter(p => !q || p.name.toLowerCase().includes(q) || p.handle.includes(q))
         .map(relation);
     },
-    async follow(id) { following.add(id); prefs.set('following', [...following]); },
+    // Demo people approve follow requests instantly.
+    async follow(id) { following.add(id); prefs.set('following', [...following]); return 'following'; },
+    async cancelRequest() {},
+    async getRequested() { return new Set(); },
+    async listFollowRequests() {
+      return incoming.filter(id => byId[id] && !blocked.has(id)).map(id => ({ user: byId[id], createdAt: now - 30 * MIN }));
+    },
+    async approveRequest(id) {
+      incoming = incoming.filter(x => x !== id); prefs.set('incomingRequests', incoming);
+      if (byId[id]) byId[id].followsMe = true;
+    },
+    async declineRequest(id) { incoming = incoming.filter(x => x !== id); prefs.set('incomingRequests', incoming); },
+    async removeFollower(id) { if (byId[id]) byId[id].followsMe = false; },
+    async getUserProfile(userId) {
+      const user = byId[userId];
+      const visible = blocked.has(userId) ? [] : memos.filter(m => m.userId === userId
+        && (m.audience === 'global' || (m.audience === 'followers' && following.has(userId)) || m.audience === 'close'));
+      return { user: relation(user), followers: 40 + userId.charCodeAt(1) * 7, following: 25 + userId.charCodeAt(1) * 3, memos: visible.map(withAuthor) };
+    },
     async unfollow(id) { following.delete(id); prefs.set('following', [...following]); },
 
     async toggleAmplify(m) {

@@ -8,6 +8,16 @@ service cloud.firestore {
     function me() { return request.auth.uid; }
     function validHandle(h) { return h is string && h.matches('^[a-z0-9_]{3,20}$'); }
     function validName(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+    // Who can hear a memo: its author; everyone for global; approved followers
+    // for followers-only; people on the author's close friends list for close.
+    // Access follows the current relationship, so it ends when a follow is
+    // removed or someone is taken off the list.
+    function canHear(m) {
+      return m.authorId == me()
+        || m.audience == 'global'
+        || (m.audience == 'followers' && exists(/databases/$(database)/documents/follows/$(me() + '_' + m.authorId)))
+        || (m.audience == 'close' && me() in get(/databases/$(database)/documents/users/$(m.authorId)/private/closeFriends).data.uids);
+    }
     // True when `owner` has blocked the signed-in user.
     function blockedBy(owner) { return exists(/databases/$(database)/documents/users/$(owner)/blocked/$(me())); }
 
@@ -50,27 +60,39 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == me();
     }
 
-    // follower_target. You can unfollow, or remove one of your followers.
+    // Follow requests: requester_target. The requester can cancel; the person
+    // being followed approves (turning it into a follow) or declines.
+    match /followRequests/{id} {
+      allow read: if signedIn() && (resource.data.requester == me() || resource.data.target == me());
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['requester', 'target', 'createdAt'])
+        && request.resource.data.requester == me()
+        && request.resource.data.target != me()
+        && id == me() + '_' + request.resource.data.target
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.target))
+        && !exists(/databases/$(database)/documents/follows/$(me() + '_' + request.resource.data.target))
+        && !blockedBy(request.resource.data.target)
+        && request.resource.data.createdAt == request.time;
+      allow delete: if signedIn() && (resource.data.requester == me() || resource.data.target == me());
+    }
+
+    // follower_target. Only the person being followed can create one, by
+    // approving a pending request (and removing it in the same write).
+    // You can unfollow, or remove one of your followers.
     match /follows/{id} {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['follower', 'target', 'createdAt'])
-        && request.resource.data.follower == me()
-        && request.resource.data.target != me()
-        && id == me() + '_' + request.resource.data.target
-        && exists(/databases/$(database)/documents/users/$(request.resource.data.target))
-        && !blockedBy(request.resource.data.target);
+        && request.resource.data.target == me()
+        && request.resource.data.follower != me()
+        && id == request.resource.data.follower + '_' + me()
+        && exists(/databases/$(database)/documents/followRequests/$(id))
+        && !existsAfter(/databases/$(database)/documents/followRequests/$(id));
       allow delete: if signedIn() && (resource.data.follower == me() || resource.data.target == me());
     }
 
     match /memos/{memoId} {
-      // Global memos are open to everyone signed in. Followers-only and close friends
-      // memos are readable only by people they were delivered to (see feeds below).
-      function canRead() {
-        return resource.data.authorId == me()
-          || resource.data.audience == 'global'
-          || exists(/databases/$(database)/documents/feeds/$(me())/items/$(memoId));
-      }
+      function canRead() { return canHear(resource.data); }
       function likePath() { return /databases/$(database)/documents/memos/$(memoId)/likes/$(me()); }
       function ampPath() { return /databases/$(database)/documents/amplifies/$(me() + '_' + memoId); }
       function ampCount(data) { return data.get('amplifyCount', 0); }
@@ -106,10 +128,7 @@ service cloud.firestore {
       // memo's author has blocked them. Comment authors and memo authors can delete.
       match /comments/{commentId} {
         function memo() { return get(/databases/$(database)/documents/memos/$(memoId)).data; }
-        function canReadMemo() {
-          return memo().authorId == me() || memo().audience == 'global'
-            || exists(/databases/$(database)/documents/feeds/$(me())/items/$(memoId));
-        }
+        function canReadMemo() { return canHear(memo()); }
         allow read: if signedIn() && canReadMemo();
         allow create: if signedIn() && canReadMemo()
           && !blockedBy(memo().authorId)
@@ -174,7 +193,8 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
     }
 
-    // Each person's inbox of followers-only and close friends memos.
+    // Each person's inbox of followers-only and close friends memos (used to build
+    // Home; it doesn't grant access by itself, canHear does).
     // An author can deliver a memo only to their followers (followers-only)
     // or to people on their own private close friends list (close friends).
     match /feeds/{owner}/items/{memoId} {

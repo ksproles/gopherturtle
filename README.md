@@ -30,6 +30,8 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Report and block**: tap ••• on a memo or riff to report it (spam, harassment, hate speech, sexual content, violence, self-harm, or something else) or block the person. Blocked people can't follow you, riff on your memos or send you memos, and you won't see their memos or riffs. They aren't told. Manage your list under Profile → Blocked people. A basic word filter also masks strong profanity and slurs in captions and riffs (`www/text-filter.js`).
 
+**Follow requests and profiles**: tap anyone's name or avatar to open their profile. Without following, you only hear their public memos. **Follow** sends a request (the button shows **Requested**); they approve or decline it under **Profile → Follow requests** (a red dot on the Profile tab means someone's waiting). Approved followers hear followers-only memos, including older ones; close friends memos need you on their close friends list. Access follows the current relationship, so it ends when someone removes you as a follower or takes you off their list. Unfollowing or canceling a request works from the same button.
+
 **Search**: find people, follow or unfollow them, and search memo captions.
 
 **Profile**: your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
@@ -92,7 +94,8 @@ Microphone permission is already declared on both platforms (`NSMicrophoneUsageD
 The rules in `firestore.rules` and `storage.rules` run on Google's servers, so they hold even if someone modifies the app:
 
 - **Close friends lists** are stored under your account and only you can read or change them. Memos to close friends are delivered to each person individually, so nobody can see who else got one.
-- **Followers-only memos** can only be delivered to people who actually follow you.
+- **Follows need approval**: a follow only exists once the person being followed approves the request.
+- **Followers-only memos** can be heard only by approved followers, and **close friends memos** only by people currently on the author's list, checked every time (not just when posted).
 - **Audio files** can only be downloaded by people allowed to hear that memo.
 - Likes can only go up or down by one per person, and only the author can edit or delete a memo.
 - Only people who can hear a memo can read or write its comments. Blocked people can't comment on your memos, follow you, or deliver memos to you.
@@ -123,7 +126,7 @@ With automatic updates set up, rules changes are published on every push. Withou
 ```sh
 npm run emulators                 # local Auth, Firestore and Storage
 # open http://127.0.0.1:5000/?emulators
-npm run test:rules                # 50 checks of who can read and write what
+npm run test:rules                # 71 checks of who can read and write what
 ```
 
 ### Known limits (fine to launch with, worth improving later)
