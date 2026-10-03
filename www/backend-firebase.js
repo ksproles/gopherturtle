@@ -46,6 +46,7 @@ export function friendlyError(e) {
     'auth/network-request-failed': 'Can’t reach the server. Check your connection.',
     'auth/requires-recent-login': 'For your security, enter your password again.',
     'permission-denied': 'You don’t have access to that.',
+    'failed-precondition': 'The database is still getting ready. Try again in a few minutes.',
     'unavailable': 'Can’t reach the server. Check your connection.',
   };
   return (e && (e instanceof BackendError ? e.message : map[e.code])) || 'Something went wrong. Try again.';
@@ -126,6 +127,19 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     return m;
   }
 
+  // Newest-first query. Sorting needs a composite index (firestore.indexes.json);
+  // if it's missing or still building, fall back to an unsorted query and sort here.
+  async function sortedQuery(col, filter, max) {
+    try {
+      return (await getDocs(query(col, filter, orderBy('createdAt', 'desc'), limit(max)))).docs;
+    } catch (e) {
+      if (e.code !== 'failed-precondition') throw e;
+      console.warn('Index not ready yet, using an unsorted query:', e.message);
+      const docs = (await getDocs(query(col, filter, limit(max * 4)))).docs;
+      return docs.sort((a, b) => toMs(b.data().createdAt) - toMs(a.data().createdAt)).slice(0, max);
+    }
+  }
+
   async function fanOut(memoId, audience) {
     let recipients = [];
     if (audience === 'followers') {
@@ -200,15 +214,21 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     async loadFeed() {
       const id = uid();
       const memosCol = collection(db, 'memos');
-      const [inbox, global, mine] = await Promise.all([
-        getDocs(query(collection(db, 'feeds', id, 'items'), orderBy('createdAt', 'desc'), limit(FEED_LIMIT))),
-        getDocs(query(memosCol, where('audience', '==', 'global'), orderBy('createdAt', 'desc'), limit(50))),
-        getDocs(query(memosCol, where('authorId', '==', id), orderBy('createdAt', 'desc'), limit(50))),
+      // Each list loads on its own, so one failing (for example an index that's
+      // still building) never hides the others.
+      const results = await Promise.allSettled([
+        getDocs(query(collection(db, 'feeds', id, 'items'), orderBy('createdAt', 'desc'), limit(FEED_LIMIT))).then(r => r.docs),
+        sortedQuery(memosCol, where('audience', '==', 'global'), 50),
+        sortedQuery(memosCol, where('authorId', '==', id), 100),
       ]);
+      const failed = results.filter(r => r.status === 'rejected');
+      failed.forEach(r => console.error('Feed list failed to load', r.reason));
+      if (failed.length === results.length) throw failed[0].reason;
+      const [inbox, global, mine] = results.map(r => (r.status === 'fulfilled' ? r.value : []));
       const snaps = new Map();
-      [...global.docs, ...mine.docs].forEach(s => snaps.set(s.id, s));
+      [...global, ...mine].forEach(s => snaps.set(s.id, s));
       // Delivered memos: fetch each one; deleted memos simply fail and are skipped.
-      const delivered = await Promise.all(inbox.docs
+      const delivered = await Promise.all(inbox
         .filter(s => !snaps.has(s.id))
         .map(s => getDoc(doc(db, 'memos', s.id)).catch(() => null)));
       delivered.forEach(s => { if (s && s.exists()) snaps.set(s.id, s); });
