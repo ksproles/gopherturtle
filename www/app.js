@@ -49,6 +49,9 @@ const state = {
 const $ = sel => document.querySelector(sel);
 const app = $('#app');
 const feedEl = $('#feed');
+const discoverEl = $('#discover-feed');
+// Home shows close friends + following; global memos live on Discover.
+const HOME_AUDIENCES = ['close', 'followers'];
 const feedLabel = $('#feed-label');
 
 // ---------- Helpers ----------
@@ -142,15 +145,25 @@ function renderHome() {
     feedEl.innerHTML = '';
     return;
   }
-  const list = sorted(state.memos.filter(m => !state.filter || m.audience === state.filter));
+  const list = sorted(state.memos.filter(m =>
+    HOME_AUDIENCES.includes(m.audience) && (!state.filter || m.audience === state.filter)));
   feedLabel.textContent = state.filter
     ? `${AUDIENCES[state.filter].feedLabel} · newest first`
-    : 'Everything, newest first';
+    : 'Close friends and following, newest first';
   renderList(feedEl, list, state.filter
     ? `No ${AUDIENCES[state.filter].feedLabel.toLowerCase()} memos yet.`
-    : 'No memos yet. Tap Post to record the first one.');
+    : 'No memos from close friends or people you follow yet. Find people in Search, or check out Discover.');
   document.querySelectorAll('.chip').forEach(c =>
     c.setAttribute('aria-pressed', String(c.dataset.filter === state.filter)));
+}
+
+function renderDiscover() {
+  if (state.loading && !state.memos.length) {
+    discoverEl.innerHTML = '<li class="empty">Loading memos…</li>';
+    return;
+  }
+  renderList(discoverEl, sorted(state.memos.filter(m => m.audience === 'global')),
+    'No global memos yet. Post one with the audience set to Global.');
 }
 
 let searchSeq = 0;
@@ -174,11 +187,11 @@ async function renderSearch() {
     </li>`).join('') : `<li class="empty">${q ? 'No people match.' : 'No one else is here yet.'}</li>`;
 
   const memos = sorted(state.memos.filter(m => {
-    if (!q) return m.audience === 'global';
+    if (!q) return false;
     const u = m.author;
     return (m.caption || '').toLowerCase().includes(q) || u.name.toLowerCase().includes(q) || u.handle.includes(q);
   }));
-  renderList($('#search-results'), memos, q ? `No memos match “${esc(state.query)}”.` : 'No global memos yet.');
+  renderList($('#search-results'), memos, q ? `No memos match “${esc(state.query)}”.` : 'Type to search memo captions.');
 }
 
 function renderProfile() {
@@ -210,6 +223,7 @@ function render() {
   document.querySelectorAll('.tab[data-screen]').forEach(t =>
     t.classList.toggle('is-active', t.dataset.screen === state.screen));
   if (state.screen === 'home') renderHome();
+  if (state.screen === 'discover') renderDiscover();
   if (state.screen === 'search') renderSearch();
   if (state.screen === 'profile') renderProfile();
 }
@@ -302,8 +316,9 @@ audio.addEventListener('ended', () => {
   const m = player.memo;
   stopPlayback();
   // Keep scrolling hands-free: play the next memo in the visible feed.
-  if (m && state.screen === 'home') {
-    const card = feedEl.querySelector(`.memo[data-id="${CSS.escape(m.id)}"]`);
+  const listEl = { home: feedEl, discover: discoverEl }[state.screen];
+  if (m && listEl) {
+    const card = listEl.querySelector(`.memo[data-id="${CSS.escape(m.id)}"]`);
     const next = card && card.nextElementSibling;
     if (next && next.dataset.id) {
       next.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -525,10 +540,11 @@ async function submitPost() {
   btn.disabled = false;
   state.memos = state.memos.filter(m => m.id !== memo.id).concat(memo);
   closeSheet();
-  state.screen = 'home';
+  // Show the new memo where it lives: global memos on Discover, the rest on Home.
+  state.screen = memo.audience === 'global' ? 'discover' : 'home';
   state.filter = null;
   render();
-  feedEl.closest('.screen').scrollTo({ top: 0, behavior: 'smooth' });
+  $('#screen-' + state.screen).scrollTo({ top: 0, behavior: 'smooth' });
   toast('Posted to ' + AUDIENCES[memo.audience].label.toLowerCase());
 }
 
@@ -671,8 +687,9 @@ document.querySelector('.tabbar').addEventListener('click', e => {
   const tab = e.target.closest('.tab');
   if (!tab) return;
   if (tab.id === 'post-btn') { openSheet(); return; }
-  if (tab.dataset.screen === state.screen && state.screen === 'home') {
-    feedEl.closest('.screen').scrollTo({ top: 0, behavior: 'smooth' });
+  // Tapping Home or Discover again scrolls to the top and checks for new memos.
+  if (tab.dataset.screen === state.screen && (state.screen === 'home' || state.screen === 'discover')) {
+    $('#screen-' + state.screen).scrollTo({ top: 0, behavior: 'smooth' });
     refreshFeed();
   }
   state.screen = tab.dataset.screen;
@@ -1214,4 +1231,5 @@ boot();
 setInterval(() => {
   if (!backend || !backend.me || !sheet.hidden || !cfSheet.hidden || !speedMenu.hidden) return;
   if (state.screen === 'home') renderHome();
+  if (state.screen === 'discover') renderDiscover();
 }, 60 * 1000);

@@ -26,7 +26,6 @@
     <nav class="filters" id="filters" aria-label="Filter memos by audience">
       <button class="chip" data-filter="close" data-aud="close" aria-pressed="false">Close friends</button>
       <button class="chip" data-filter="followers" data-aud="followers" aria-pressed="false">Following</button>
-      <button class="chip" data-filter="global" data-aud="global" aria-pressed="false">Global</button>
     </nav>
   </header>
 
@@ -35,6 +34,14 @@
     <section class="screen" id="screen-home" aria-label="Home feed">
       <p class="feed-label" id="feed-label">Everything, newest first</p>
       <ol class="feed" id="feed"></ol>
+    </section>
+
+    <section class="screen" id="screen-discover" aria-label="Discover" hidden>
+      <div class="discover-head" data-aud="global">
+        <h2 class="discover-title">Discover</h2>
+        <p class="discover-sub">Global memos from everyone on Gopher Turtle, newest first.</p>
+      </div>
+      <ol class="feed" id="discover-feed"></ol>
     </section>
 
     <section class="screen" id="screen-search" aria-label="Search" hidden>
@@ -94,6 +101,10 @@
     <button class="tab is-active" data-screen="home" aria-label="Home">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
       <span>Home</span>
+    </button>
+    <button class="tab" data-screen="discover" aria-label="Discover">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>
+      <span>Discover</span>
     </button>
     <button class="tab tab-post" id="post-btn" aria-label="Post a voice memo">
       <span class="post-disc">

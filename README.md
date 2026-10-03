@@ -7,13 +7,15 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 ## Features
 
 **Home**
-- A top bar with three color-coded filters: **Close friends** (green), **Following** (blue), **Global** (orange). Tap one to show only that audience. Tap it again to go back to everything.
-- With no filter selected, the feed shows every memo from newest to oldest.
+- A top bar with two color-coded filters: **Close friends** (green) and **Following** (blue). Tap one to show only that audience. Tap it again to go back to both.
+- With no filter selected, Home shows close friends and following memos together, newest first.
 - Each memo card carries its audience color: a stripe down the side, a badge, a play button, and a waveform that fills in as it plays.
-- When a memo finishes, the next one in the feed plays automatically.
+- When a memo finishes, the next one in the list plays automatically.
 - **Playback speed:** press and hold any play button to pick 1×, 1.25×, 1.5× or 2×. The speed applies to every memo and is remembered. Cards show the speed when it isn't 1×.
 
-**Bottom bar**: Home · Post · Search · Profile
+**Discover**: global memos (orange) from everyone, newest first.
+
+**Bottom bar**: Home · Discover · Post · Search · Profile
 
 **Post**
 1. Tap **Post** and a recorder sheet slides up.
