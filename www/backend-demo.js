@@ -75,6 +75,10 @@ export function createDemoBackend() {
     { user: 'u8', aud: 'global', ago: 22 * 60 * MIN, dur: 27, caption: 'Street musician in Lisbon, had to share', likes: 589 },
     { user: 'u1', aud: 'close', ago: 26 * 60 * MIN, dur: 9, caption: 'goodnight turtles 🐢', likes: 8 },
   ].map((m, i) => ({
+    amplifies: [3, 41, 2, 0, 96, 1, 4, 57, 0][i],
+    amplified: false,
+    amplifiedBy: i === 1 ? ['Priya Natarajan'] : i === 7 ? ['Ruth Achebe', 'Theo Brandt'] : [],
+    amplifiedAt: i === 1 ? now - 6 * MIN : i === 7 ? now - 50 * MIN : 0,
     id: 'seed-' + i,
     userId: m.user,
     audience: m.aud,
@@ -141,6 +145,7 @@ export function createDemoBackend() {
       const memo = {
         id: 'me-' + Date.now(), userId: me.id, audience, createdAt: Date.now(),
         duration, caption, likes: 0, liked: false, peaks, blob,
+        amplifies: 0, amplified: false, amplifiedBy: [], amplifiedAt: 0,
       };
       memos.push(memo);
       idb.put(memo);
@@ -168,6 +173,13 @@ export function createDemoBackend() {
     },
     async follow(id) { following.add(id); prefs.set('following', [...following]); },
     async unfollow(id) { following.delete(id); prefs.set('following', [...following]); },
+
+    async toggleAmplify(m) {
+      const stored = memos.find(x => x.id === m.id);
+      stored.amplified = !stored.amplified;
+      stored.amplifies = Math.max(0, (stored.amplifies || 0) + (stored.amplified ? 1 : -1));
+      return { amplified: stored.amplified, amplifies: stored.amplifies };
+    },
 
     async listComments(m) {
       return (comments[m.id] || [])

@@ -1,6 +1,6 @@
 {
-  "name": "Gopher Turtle",
-  "short_name": "Gopher Turtle",
+  "name": "RiffRaff",
+  "short_name": "RiffRaff",
   "description": "Scrollable voice memos from close friends, people you follow, and the world.",
   "start_url": "./index.html",
   "display": "standalone",

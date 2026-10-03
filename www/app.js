@@ -1,4 +1,4 @@
-/* Gopher Turtle — scrollable voice memos.
+/* RiffRaff — scrollable voice memos.
  * Vanilla JS modules, no build step for the app itself.
  * Data comes from a backend: demo (on-device examples) or Firebase (real accounts),
  * chosen by www/firebase-config.js.
@@ -55,7 +55,13 @@ const discoverEl = $('#discover-feed');
 // Home: everything from people you follow, close friends memos sent to you, and your own.
 // Discover: public (global) memos, ranked for you.
 function onHome(m) {
-  return m.userId === backend.me.id || m.audience === 'close' || state.following.has(m.userId);
+  return m.userId === backend.me.id || m.audience === 'close' || state.following.has(m.userId)
+    || (m.amplifiedBy && m.amplifiedBy.length > 0);
+}
+function amplifiedText(names) {
+  if (names.length === 1) return `Amplified by ${names[0]}`;
+  if (names.length === 2) return `Amplified by ${names[0]} and ${names[1]}`;
+  return `Amplified by ${names[0]} and ${names.length - 1} others`;
 }
 const feedLabel = $('#feed-label');
 
@@ -118,18 +124,19 @@ function memoHTML(m, reason) {
         <span class="dur">${fmtDur(m.duration)}</span>
       </div>
       <div class="memo-actions">
-        <button class="act ${m.liked ? 'liked' : ''}" data-act="like" aria-pressed="${m.liked}" aria-label="Like">
+        <button class="act ${m.liked ? 'liked' : ''}" data-act="like" aria-pressed="${m.liked}">
           <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
-          <span>${fmtCount(m.likes)}</span>
+          <span class="act-label">Like</span><span class="act-count">${fmtCount(m.likes)}</span>
         </button>
-        <button class="act" data-act="comments" aria-label="Comments">
+        <button class="act" data-act="comments">
           <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>
-          <span>${fmtCount(m.comments || 0)}</span>
+          <span class="act-label">Riff</span><span class="act-count">${fmtCount(m.comments || 0)}</span>
         </button>
-        ${mine ? `<button class="act act-delete" data-act="delete" aria-label="Delete this memo">
-          <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
-          <span>Delete</span>
-        </button>` : `<button class="more-btn" data-act="more" aria-label="More options for this memo">${ICON_MORE}</button>`}
+        ${m.audience === 'global' ? `<button class="act act-amp ${m.amplified ? 'amplified' : ''}" data-act="amplify" aria-pressed="${!!m.amplified}" ${mine ? 'disabled title="You can’t amplify your own memo"' : ''}>
+          <svg viewBox="0 0 24 24"><path d="M3 10v4h3l5 4V6L6 10zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12"/></svg>
+          <span class="act-label">Amplify</span><span class="act-count">${fmtCount(m.amplifies || 0)}</span>
+        </button>` : ''}
+        <button class="more-btn" data-act="more" aria-label="More options for this memo">${ICON_MORE}</button>
       </div>
     </li>`;
 }
@@ -153,9 +160,14 @@ function renderHome() {
   }
   const filters = {
     close: m => m.audience === 'close',
-    followers: m => state.following.has(m.userId) && m.audience !== 'close',
+    followers: m => (state.following.has(m.userId) || m.amplifiedBy.length > 0) && m.audience !== 'close',
   };
-  const list = sorted(state.memos.filter(m => onHome(m) && (!state.filter || filters[state.filter](m))));
+  // Amplified memos sort by when they were amplified.
+  const homeTime = m => Math.max(m.createdAt, m.amplifiedAt || 0);
+  const list = state.memos
+    .filter(m => onHome(m) && (!state.filter || filters[state.filter](m)))
+    .sort((a, b) => homeTime(b) - homeTime(a));
+  const reasons = new Map(list.filter(m => m.amplifiedBy && m.amplifiedBy.length).map(m => [m.id, amplifiedText(m.amplifiedBy)]));
   feedLabel.textContent = {
     close: 'Close friends · newest first',
     followers: 'People you follow · newest first',
@@ -163,7 +175,7 @@ function renderHome() {
   renderList(feedEl, list, {
     close: 'No close friends memos yet.',
     followers: 'No memos from people you follow yet. Find people in Search or on Discover.',
-  }[state.filter] || 'No memos yet. Follow people from Search or Discover, and their memos will show up here.');
+  }[state.filter] || 'No memos yet. Follow people from Search or Discover, and their memos will show up here.', reasons);
   document.querySelectorAll('.chip').forEach(c =>
     c.setAttribute('aria-pressed', String(c.dataset.filter === state.filter)));
 }
@@ -203,8 +215,8 @@ function rankDiscover(memos) {
     if (fof) { affinity += 1.5 + Math.min(fof.length, 3); reason = reason || followedByText(fof); }
     const plays = listening.plays[m.userId] || 0;
     if (plays) { affinity += Math.min(plays, 5) * 0.5; reason = reason || `You’ve listened to @${m.author.handle}`; }
-    const popularity = Math.log1p(m.likes) + 1.5 * Math.log1p(m.comments || 0);
-    if (!reason && popularity >= 3) reason = 'Popular on Gopher Turtle';
+    const popularity = Math.log1p(m.likes) + 1.5 * Math.log1p(m.comments || 0) + 2 * Math.log1p(m.amplifies || 0);
+    if (!reason && popularity >= 3) reason = 'Popular on RiffRaff';
     const ageHours = Math.max(0, now - m.createdAt) / 36e5;
     let score = (1 + popularity + affinity) / Math.pow(ageHours + 2, 0.8);
     if (state.following.has(m.userId)) { score *= 0.5; reason = ''; }
@@ -473,7 +485,7 @@ function drawLevels(levels) {
 function micErrorMessage(e) {
   if (!window.isSecureContext) return 'Recording needs a secure connection. Open the app from its https:// address.';
   if (!navigator.mediaDevices || !window.MediaRecorder) return 'This browser can’t record audio. Try Safari or Chrome.';
-  if (e && e.name === 'NotAllowedError') return 'Gopher Turtle needs your microphone. Allow microphone access in your browser or phone settings, then tap record again.';
+  if (e && e.name === 'NotAllowedError') return 'RiffRaff needs your microphone. Allow microphone access in your browser or phone settings, then tap record again.';
   if (e && e.name === 'NotFoundError') return 'No microphone was found on this device.';
   return 'Couldn’t start the microphone. Close other apps using it and try again.';
 }
@@ -787,7 +799,7 @@ document.querySelector('.screens').addEventListener('click', e => {
     togglePlay(m, Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)));
   }
   if (act === 'like') toggleLike(m);
-  if (act === 'delete') confirmDelete(btn, m);
+  if (act === 'amplify') toggleAmplify(m);
   if (act === 'comments') openComments(m);
   if (act === 'more') memoMenu(m);
 });
@@ -796,8 +808,33 @@ const paintLike = m => cardsFor(m.id).forEach(c => {
   const b = c.querySelector('[data-act="like"]');
   b.classList.toggle('liked', m.liked);
   b.setAttribute('aria-pressed', String(m.liked));
-  b.querySelector('span').textContent = fmtCount(m.likes);
+  b.querySelector('.act-count').textContent = fmtCount(m.likes);
 });
+const paintAmplify = m => cardsFor(m.id).forEach(c => {
+  const b = c.querySelector('[data-act="amplify"]');
+  if (!b) return;
+  b.classList.toggle('amplified', m.amplified);
+  b.setAttribute('aria-pressed', String(m.amplified));
+  b.querySelector('.act-count').textContent = fmtCount(m.amplifies);
+});
+const amplifying = new Set();
+async function toggleAmplify(m) {
+  if (amplifying.has(m.id) || m.userId === backend.me.id) return;
+  amplifying.add(m.id);
+  const before = { amplified: m.amplified, amplifies: m.amplifies };
+  m.amplified = !m.amplified;
+  m.amplifies = Math.max(0, m.amplifies + (m.amplified ? 1 : -1));
+  paintAmplify(m);
+  try {
+    Object.assign(m, await backend.toggleAmplify({ ...m, ...before }));
+    toast(m.amplified ? 'Amplified to your followers' : 'Amplify removed');
+  } catch (e) {
+    Object.assign(m, before);
+    toast(friendlyError(e));
+  }
+  paintAmplify(m);
+  amplifying.delete(m.id);
+}
 const liking = new Set();
 async function toggleLike(m) {
   if (liking.has(m.id)) return;
@@ -817,18 +854,10 @@ async function toggleLike(m) {
   liking.delete(m.id);
 }
 
-// First tap arms the button, second tap deletes.
-async function confirmDelete(btn, m) {
-  if (!btn.classList.contains('confirm')) {
-    btn.classList.add('confirm');
-    btn.querySelector('span').textContent = 'Tap again to delete';
-    setTimeout(() => {
-      if (!btn.isConnected) return;
-      btn.classList.remove('confirm');
-      btn.querySelector('span').textContent = 'Delete';
-    }, 3000);
-    return;
-  }
+async function deleteMemo(m) {
+  const ok = await chooseAction('Delete this memo? Its likes, riffs and amplifies go with it. This can’t be undone.',
+    [{ key: 'delete', label: 'Delete memo', danger: true }]);
+  if (ok !== 'delete') return;
   if (player.memo && player.memo.id === m.id) stopPlayback();
   try {
     await backend.deleteMemo(m);
@@ -943,7 +972,7 @@ const REASONS = [
 
 // target: {type, targetId, targetAuthorId, memoId, text, author}
 async function reportFlow(target) {
-  const what = { memo: 'this memo', comment: 'this comment', user: `@${target.author.handle}` }[target.type];
+  const what = { memo: 'this memo', comment: 'this riff', user: `@${target.author.handle}` }[target.type];
   const reason = await chooseAction(`Why are you reporting ${what}?`, REASONS);
   if (!reason) return;
   const { author, ...report } = target;
@@ -960,7 +989,7 @@ async function reportFlow(target) {
 async function blockUser(user, confirmed) {
   if (!confirmed) {
     const ok = await chooseAction(
-      `Block @${user.handle}? They won’t be able to follow you, comment on your memos or send you memos, and you won’t see theirs. They won’t be told.`,
+      `Block @${user.handle}? They won’t be able to follow you, riff on your memos or send you memos, and you won’t see theirs. They won’t be told.`,
       [{ key: 'block', label: `Block @${user.handle}`, danger: true }]);
     if (ok !== 'block') return;
   }
@@ -979,6 +1008,10 @@ async function blockUser(user, confirmed) {
 }
 
 async function memoMenu(m) {
+  if (m.userId === backend.me.id) {
+    if (await chooseAction('Your memo', [{ key: 'delete', label: 'Delete memo', danger: true }]) === 'delete') deleteMemo(m);
+    return;
+  }
   const key = await chooseAction(`Memo from @${m.author.handle}`, [
     { key: 'report', label: 'Report memo', danger: true },
     { key: 'block', label: `Block @${m.author.handle}`, danger: true },
@@ -1004,18 +1037,18 @@ function commentHTML(c) {
         <div class="comment-meta"><b>${esc(u.name)}</b> · ${timeAgo(c.createdAt)}</div>
         <p class="comment-text">${esc(filterText(c.text))}</p>
       </div>
-      <button class="more-btn" data-cmore="${esc(c.id)}" aria-label="More options for this comment">${ICON_MORE}</button>
+      <button class="more-btn" data-cmore="${esc(c.id)}" aria-label="More options for this riff">${ICON_MORE}</button>
     </li>`;
 }
 function renderComments() {
   $('#comment-list').innerHTML = comments.length
     ? comments.map(commentHTML).join('')
-    : '<li class="empty">No comments yet. Be the first.</li>';
-  $('#comments-title').textContent = comments.length === 1 ? '1 comment' : `${comments.length} comments`;
+    : '<li class="empty">No riffs yet. Start one.</li>';
+  $('#comments-title').textContent = comments.length === 1 ? '1 riff' : `${comments.length} riffs`;
 }
 function setCommentCount(m, n) {
   m.comments = n;
-  cardsFor(m.id).forEach(c => { c.querySelector('[data-act="comments"] span').textContent = fmtCount(n); });
+  cardsFor(m.id).forEach(c => { c.querySelector('[data-act="comments"] .act-count').textContent = fmtCount(n); });
 }
 async function loadComments(m) {
   try {
@@ -1032,7 +1065,7 @@ function openComments(m) {
   openMemo = m;
   comments = [];
   $('#comment-list').innerHTML = '<li class="empty">Loading…</li>';
-  $('#comments-title').textContent = 'Comments';
+  $('#comments-title').textContent = 'Riffs';
   commentInput.value = '';
   $('#comment-send').disabled = true;
   commentsSheet.hidden = false;
@@ -1062,7 +1095,7 @@ $('#comment-form').addEventListener('submit', async e => {
     const list = $('#comment-list');
     list.scrollTop = list.scrollHeight;
   } catch (err) {
-    toast(err && err.code === 'permission-denied' ? 'You can’t comment on this memo.' : friendlyError(err));
+    toast(err && err.code === 'permission-denied' ? 'You can’t riff on this memo.' : friendlyError(err));
     $('#comment-send').disabled = false;
   }
 });
@@ -1075,12 +1108,12 @@ $('#comment-list').addEventListener('click', async e => {
   const mine = c.userId === backend.me.id;
   const myMemo = m.userId === backend.me.id;
   const items = [];
-  if (mine || myMemo) items.push({ key: 'delete', label: 'Delete comment', danger: true });
+  if (mine || myMemo) items.push({ key: 'delete', label: 'Delete riff', danger: true });
   if (!mine) {
-    items.push({ key: 'report', label: 'Report comment', danger: true });
+    items.push({ key: 'report', label: 'Report riff', danger: true });
     items.push({ key: 'block', label: `Block @${c.author.handle}`, danger: true });
   }
-  const key = await chooseAction(mine ? 'Your comment' : `Comment from @${c.author.handle}`, items);
+  const key = await chooseAction(mine ? 'Your riff' : `Riff from @${c.author.handle}`, items);
   if (key === 'delete') {
     try {
       await backend.deleteComment(m, c);

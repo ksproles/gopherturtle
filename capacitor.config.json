@@ -1,6 +1,6 @@
 {
   "appId": "com.gopherturtle.app",
-  "appName": "Gopher Turtle",
+  "appName": "RiffRaff",
   "webDir": "www",
   "ios": { "contentInset": "never" },
   "android": { "allowMixedContent": false }

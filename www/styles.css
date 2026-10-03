@@ -258,7 +258,7 @@ button { cursor: pointer; }
   font-variant-numeric: tabular-nums;
 }
 
-.memo-actions { display: flex; gap: 4px; margin-top: 8px; margin-left: -6px; }
+.memo-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; margin-left: -6px; }
 .act {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 6px 8px;
@@ -269,7 +269,10 @@ button { cursor: pointer; }
   font-variant-numeric: tabular-nums;
 }
 .act svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.act-count { font-weight: 700; }
 .act.liked { color: var(--rec); }
+.act.amplified { color: var(--global); }
+.act:disabled { opacity: .55; cursor: default; }
 .act.liked svg { fill: currentColor; }
 
 /* ---------- Avatars ---------- */
@@ -639,8 +642,6 @@ button { cursor: pointer; }
 }
 .follow-btn[aria-pressed="true"] { background: none; color: var(--followers); }
 .cf-tag { font-size: 11.5px; font-weight: 700; color: var(--close); }
-.act.act-delete { margin-left: auto; }
-.act.act-delete.confirm { color: var(--rec); }
 
 /* ---------- Comments ---------- */
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

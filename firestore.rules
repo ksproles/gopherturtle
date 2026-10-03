@@ -72,6 +72,8 @@ service cloud.firestore {
           || exists(/databases/$(database)/documents/feeds/$(me())/items/$(memoId));
       }
       function likePath() { return /databases/$(database)/documents/memos/$(memoId)/likes/$(me()); }
+      function ampPath() { return /databases/$(database)/documents/amplifies/$(me() + '_' + memoId); }
+      function ampCount(data) { return data.get('amplifyCount', 0); }
 
       allow read: if signedIn() && canRead();
       allow create: if signedIn()
@@ -84,13 +86,20 @@ service cloud.firestore {
         && request.resource.data.peaks is list && request.resource.data.peaks.size() <= 64
         && request.resource.data.audioPath == 'audio/' + me() + '/' + memoId
         && request.resource.data.likeCount == 0;
-      // The only change anyone can make is a like or unlike, paired with their like doc.
-      allow update: if signedIn() && canRead()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
-        && ((request.resource.data.likeCount == resource.data.likeCount + 1
-              && !exists(likePath()) && existsAfter(likePath()))
-          || (request.resource.data.likeCount == resource.data.likeCount - 1
-              && exists(likePath()) && !existsAfter(likePath())));
+      // The only changes anyone can make: a like/unlike paired with their like doc,
+      // or an amplify/unamplify of a public memo paired with their amplify doc.
+      allow update: if signedIn() && canRead() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+          && ((request.resource.data.likeCount == resource.data.likeCount + 1
+                && !exists(likePath()) && existsAfter(likePath()))
+            || (request.resource.data.likeCount == resource.data.likeCount - 1
+                && exists(likePath()) && !existsAfter(likePath()))))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amplifyCount'])
+          && resource.data.audience == 'global'
+          && ((ampCount(request.resource.data) == ampCount(resource.data) + 1
+                && !exists(ampPath()) && existsAfter(ampPath()))
+            || (ampCount(request.resource.data) == ampCount(resource.data) - 1
+                && exists(ampPath()) && !existsAfter(ampPath())))));
       allow delete: if signedIn() && resource.data.authorId == me();
 
       // Text comments. Anyone who can hear the memo can comment, unless the
@@ -125,6 +134,29 @@ service cloud.firestore {
     // Lets you find your own comments across all memos (used when deleting your account).
     match /{path=**}/comments/{commentId} {
       allow read: if signedIn() && resource.data.authorId == me();
+    }
+
+    // Amplifies (reposts) of public memos: {uid}_{memoId}. Visible to everyone
+    // signed in, so followers see what you amplified. Each one is paired with
+    // the memo's amplifyCount going up or down by exactly one.
+    match /amplifies/{id} {
+      function memoPath(memoId) { return /databases/$(database)/documents/memos/$(memoId); }
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'memoId', 'authorId', 'createdAt'])
+        && request.resource.data.uid == me()
+        && id == me() + '_' + request.resource.data.memoId
+        && get(memoPath(request.resource.data.memoId)).data.audience == 'global'
+        && get(memoPath(request.resource.data.memoId)).data.authorId == request.resource.data.authorId
+        && request.resource.data.authorId != me()
+        && !blockedBy(request.resource.data.authorId)
+        && request.resource.data.createdAt == request.time
+        && getAfter(memoPath(request.resource.data.memoId)).data.get('amplifyCount', 0)
+            == get(memoPath(request.resource.data.memoId)).data.get('amplifyCount', 0) + 1;
+      allow delete: if signedIn() && resource.data.uid == me()
+        && (!exists(memoPath(resource.data.memoId))
+          || getAfter(memoPath(resource.data.memoId)).data.get('amplifyCount', 0)
+            == get(memoPath(resource.data.memoId)).data.get('amplifyCount', 0) - 1);
     }
 
     // Reports of memos, comments or people. Anyone signed in can file one;

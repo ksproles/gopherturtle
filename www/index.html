@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#2f7d5b">
-  <title>Gopher Turtle</title>
+  <title>RiffRaff</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="fonts/fonts.css">
@@ -17,11 +17,12 @@
   <header class="topbar">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true">
-        <ellipse cx="256" cy="300" rx="150" ry="104" fill="currentColor" opacity=".35"/>
-        <path d="M136 300a120 92 0 0 1 240 0z" fill="currentColor"/>
-        <circle cx="400" cy="250" r="44" fill="currentColor" opacity=".35"/>
+        <rect x="76" y="196" width="56" height="120" rx="28" fill="currentColor" opacity=".45"/>
+        <rect x="168" y="120" width="56" height="272" rx="28" fill="currentColor"/>
+        <rect x="260" y="76" width="56" height="360" rx="28" fill="currentColor"/>
+        <rect x="352" y="160" width="56" height="192" rx="28" fill="currentColor" opacity=".7"/>
       </svg>
-      <h1>gopher turtle</h1>
+      <h1>riffraff</h1>
     </div>
     <nav class="filters" id="filters" aria-label="Filter memos by audience">
       <button class="chip" data-filter="close" data-aud="close" aria-pressed="false">Close friends</button>
@@ -194,13 +195,13 @@
     <div class="sheet-grip" aria-hidden="true"></div>
     <header class="sheet-head">
       <span class="sheet-spacer"></span>
-      <h2 id="comments-title">Comments</h2>
+      <h2 id="comments-title">Riffs</h2>
       <button class="text-btn text-btn-end" id="comments-done">Done</button>
     </header>
     <ul class="comment-list" id="comment-list"></ul>
     <form class="comment-form" id="comment-form" novalidate>
-      <label class="visually-hidden" for="comment-input">Add a comment</label>
-      <input id="comment-input" type="text" maxlength="280" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
+      <label class="visually-hidden" for="comment-input">Add a riff</label>
+      <input id="comment-input" type="text" maxlength="280" placeholder="Add a riff…" autocomplete="off" enterkeyhint="send">
       <button class="send-btn" id="comment-send" type="submit" disabled>Post</button>
     </form>
   </section>
@@ -213,7 +214,7 @@
       <h2 id="blocked-title">Blocked people</h2>
       <button class="text-btn text-btn-end" id="blocked-done">Done</button>
     </header>
-    <p class="form-text sheet-note">Blocked people can’t follow you, comment on your memos, or send you memos, and you won’t see their memos or comments. They aren’t told you blocked them.</p>
+    <p class="form-text sheet-note">Blocked people can’t follow you, riff on your memos, or send you memos, and you won’t see their memos or riffs. They aren’t told you blocked them.</p>
     <ul class="people" id="blocked-list"></ul>
   </section>
 
@@ -259,11 +260,12 @@
     <div class="auth-inner">
       <div class="auth-brand">
         <svg class="auth-mark" viewBox="0 0 512 512" aria-hidden="true">
-          <ellipse cx="256" cy="300" rx="150" ry="104" fill="currentColor" opacity=".35"/>
-          <path d="M136 300a120 92 0 0 1 240 0z" fill="currentColor"/>
-          <circle cx="400" cy="250" r="44" fill="currentColor" opacity=".35"/>
-        </svg>
-        <h1 id="auth-title">gopher turtle</h1>
+        <rect x="76" y="196" width="56" height="120" rx="28" fill="currentColor" opacity=".45"/>
+        <rect x="168" y="120" width="56" height="272" rx="28" fill="currentColor"/>
+        <rect x="260" y="76" width="56" height="360" rx="28" fill="currentColor"/>
+        <rect x="352" y="160" width="56" height="192" rx="28" fill="currentColor" opacity=".7"/>
+      </svg>
+        <h1 id="auth-title">riffraff</h1>
         <p>Voice memos from close friends, people you follow, and the world.</p>
       </div>
 

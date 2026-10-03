@@ -183,6 +183,46 @@ await test('only the author can edit or delete a memo', async () => {
   await assertFails(deleteDoc(doc(db('alice'), 'memos', 'm-global')));
 });
 
+console.log('Amplify');
+function amplify(uid, memoId, authorId, delta) {
+  const d = db(uid);
+  const b = writeBatch(d);
+  const ampRef = doc(d, 'amplifies', `${uid}_${memoId}`);
+  if (delta > 0) b.set(ampRef, { uid, memoId, authorId, createdAt: serverTimestamp() });
+  else b.delete(ampRef);
+  b.update(doc(d, 'memos', memoId), { amplifyCount: increment(delta) });
+  return b.commit();
+}
+await test('anyone can amplify a public memo, and undo it', async () => {
+  await assertSucceeds(amplify('carol', 'm-global', 'bob', 1));
+  await assertSucceeds(amplify('carol', 'm-global', 'bob', -1));
+  await assertSucceeds(amplify('carol', 'm-global', 'bob', 1));
+});
+await test('nobody can amplify the same memo twice', async () => {
+  await assertFails(amplify('carol', 'm-global', 'bob', 1));
+});
+await test('followers-only and close friends memos cannot be amplified', async () => {
+  await assertFails(amplify('alice', 'm-followers', 'bob', 1));
+  await assertFails(amplify('carol', 'm-close', 'bob', 1));
+});
+await test('you cannot amplify your own memo', async () => {
+  await assertFails(amplify('bob', 'm-global', 'bob', 1));
+});
+await test('amplify counts cannot be faked', async () => {
+  await assertFails(updateDoc(doc(db('alice'), 'memos', 'm-global'), { amplifyCount: 500 }));
+  await assertFails(setDoc(doc(db('alice'), 'amplifies', 'alice_m-global'), { uid: 'alice', memoId: 'm-global', authorId: 'bob', createdAt: serverTimestamp() }));
+});
+await test('you cannot amplify for someone else', async () => {
+  const d = db('alice');
+  const b = writeBatch(d);
+  b.set(doc(d, 'amplifies', 'carol_m-global'), { uid: 'carol', memoId: 'm-global', authorId: 'bob', createdAt: serverTimestamp() });
+  b.update(doc(d, 'memos', 'm-global'), { amplifyCount: increment(1) });
+  await assertFails(b.commit());
+});
+await test('followers can load what people they follow amplified', async () => {
+  await assertSucceeds(getDocs(query(collection(db('alice'), 'amplifies'), where('uid', 'in', ['carol']), orderBy('createdAt', 'desc'))));
+});
+
 console.log('Audio files');
 await test('bob can upload audio for his memos', async () => {
   for (const id of ['m-followers', 'm-close', 'm-global']) {

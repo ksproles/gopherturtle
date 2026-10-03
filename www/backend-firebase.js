@@ -12,6 +12,7 @@
 //   memos/{memoId}/comments/{id}     {authorId, text, createdAt}
 //   users/{uid}/blocked/{otherUid}   {createdAt}  people you've blocked (owner only)
 //   reports/{id}                     write-only; reviewed in the Firebase console
+//   amplifies/{uid_memoId}           {uid, memoId, authorId, createdAt}  reposts of public memos
 //   Storage: audio/{uid}/{memoId}
 import {
   initializeApp,
@@ -104,10 +105,11 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
 
   async function toMemo(snap) {
     const d = snap.data();
-    const [author, likeSnap, commentCount] = await Promise.all([
+    const [author, likeSnap, commentCount, ampSnap] = await Promise.all([
       getUser(d.authorId),
       getDoc(doc(db, 'memos', snap.id, 'likes', uid())).catch(() => null),
       getCountFromServer(collection(db, 'memos', snap.id, 'comments')).then(c => c.data().count).catch(() => 0),
+      d.audience === 'global' ? getDoc(doc(db, 'amplifies', `${uid()}_${snap.id}`)).catch(() => null) : null,
     ]);
     const m = {
       id: snap.id,
@@ -121,6 +123,10 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       likes: d.likeCount || 0,
       liked: !!(likeSnap && likeSnap.exists()),
       comments: commentCount,
+      amplifies: d.amplifyCount || 0,
+      amplified: !!(ampSnap && ampSnap.exists()),
+      amplifiedBy: [],   // names of people you follow who amplified it
+      amplifiedAt: 0,
       audioPath: d.audioPath,
     };
     memoCache.set(m.id, m);
@@ -227,20 +233,35 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
         sortedQuery(memosCol, where('audience', '==', 'global'), 100),
         sortedQuery(memosCol, where('authorId', '==', id), 100),
         ...chunks.map(c => sortedQuery(memosCol, [where('authorId', 'in', c), where('audience', '==', 'global')], 50)),
+        // Public memos that people you follow amplified.
+        ...chunks.map(c => sortedQuery(collection(db, 'amplifies'), where('uid', 'in', c), 50)),
       ]);
       const failed = results.filter(r => r.status === 'rejected');
       failed.forEach(r => console.error('Feed list failed to load', r.reason));
       if (failed.length === results.length) throw failed[0].reason;
-      const [inbox, global, mine, ...followedGlobal] = results.map(r => (r.status === 'fulfilled' ? r.value : []));
+      const [inbox, global, mine, ...rest] = results.map(r => (r.status === 'fulfilled' ? r.value : []));
+      const followedGlobal = rest.slice(0, chunks.length).flat();
+      const amps = rest.slice(chunks.length).flat().map(s => s.data()).filter(a => !blocked.has(a.uid));
       const snaps = new Map();
-      [...global, ...mine, ...followedGlobal.flat()].forEach(s => snaps.set(s.id, s));
+      [...global, ...mine, ...followedGlobal].forEach(s => snaps.set(s.id, s));
+      const ampMissing = [...new Set(amps.map(a => a.memoId))].filter(mid => !snaps.has(mid));
+      (await Promise.all(ampMissing.map(mid => getDoc(doc(db, 'memos', mid)).catch(() => null))))
+        .forEach(s => { if (s && s.exists()) snaps.set(s.id, s); });
       // Delivered memos: fetch each one; deleted memos simply fail and are skipped.
       const delivered = await Promise.all(inbox
         .filter(s => !snaps.has(s.id))
         .map(s => getDoc(doc(db, 'memos', s.id)).catch(() => null)));
       delivered.forEach(s => { if (s && s.exists()) snaps.set(s.id, s); });
       // Memos from people you've blocked never show up.
-      return Promise.all([...snaps.values()].filter(s => !blocked.has(s.data().authorId)).map(toMemo));
+      const memos = await Promise.all([...snaps.values()].filter(s => !blocked.has(s.data().authorId)).map(toMemo));
+      const byId = new Map(memos.map(m => [m.id, m]));
+      for (const a of amps) {
+        const m = byId.get(a.memoId);
+        if (!m) continue;
+        m.amplifiedBy.push((await getUser(a.uid)).name);
+        m.amplifiedAt = Math.max(m.amplifiedAt, toMs(a.createdAt));
+      }
+      return memos;
     },
 
     async audioUrl(m) {
@@ -278,6 +299,19 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       batch.update(memoRef, { likeCount: increment(liked ? 1 : -1) });
       await batch.commit();
       return { liked, likes: Math.max(0, m.likes + (liked ? 1 : -1)) };
+    },
+
+    // Repost a public memo to your followers' Home, or undo it.
+    async toggleAmplify(m) {
+      const memoRef = doc(db, 'memos', m.id);
+      const ampRef = doc(db, 'amplifies', `${uid()}_${m.id}`);
+      const amplified = !m.amplified;
+      const batch = writeBatch(db);
+      if (amplified) batch.set(ampRef, { uid: uid(), memoId: m.id, authorId: m.userId, createdAt: serverTimestamp() });
+      else batch.delete(ampRef);
+      batch.update(memoRef, { amplifyCount: increment(amplified ? 1 : -1) });
+      await batch.commit();
+      return { amplified, amplifies: Math.max(0, m.amplifies + (amplified ? 1 : -1)) };
     },
 
     async searchPeople(q) {
@@ -432,6 +466,14 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       ]);
       await Promise.all([...out.docs, ...inc.docs, ...inbox.docs].map(s => deleteDoc(s.ref)));
       await deleteDoc(doc(db, 'users', id, 'private', 'closeFriends'));
+      const myAmps = await getDocs(query(collection(db, 'amplifies'), where('uid', '==', id)));
+      for (const a of myAmps.docs) {
+        const memoRef = doc(db, 'memos', a.data().memoId);
+        const batch = writeBatch(db);
+        batch.delete(a.ref);
+        if ((await getDoc(memoRef).catch(() => null))?.exists()) batch.update(memoRef, { amplifyCount: increment(-1) });
+        await batch.commit().catch(e => console.warn('Could not remove an amplify', e));
+      }
       const myComments = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', id)));
       await Promise.all(myComments.docs.map(s => deleteDoc(s.ref)));
       const bl = await getDocs(collection(db, 'users', id, 'blocked'));
