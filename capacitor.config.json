@@ -1,5 +1,5 @@
 {
-  "appId": "com.gopherturtle.app",
+  "appId": "snacktimemedia.twocents",
   "appName": "TwoCents",
   "webDir": "www",
   "ios": { "contentInset": "never" },

@@ -1,4 +1,4 @@
-package com.gopherturtle.app;
+package snacktimemedia.twocents;
 
 import com.getcapacitor.BridgeActivity;
 

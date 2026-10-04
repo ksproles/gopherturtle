@@ -5,7 +5,7 @@ A checklist for getting TwoCents into the App Store and Google Play, and for shi
 ## 1. Decide the permanent basics
 
 - [ ] **Final name.** Search the App Store and Google Play to make sure "TwoCents" isn't already taken, and do a quick trademark search (USPTO TESS for the US).
-- [ ] **App ID.** Currently `com.gopherturtle.app` in `capacitor.config.json`. It can't change after the first store submission, so set it now (for example `com.twocentsapp.app`). Tell Claude and it will update the iOS and Android projects.
+- [x] **App ID:** `snacktimemedia.twocents` (set in the iOS and Android projects). This is permanent once uploaded.
 - [x] **Support email:** `owner@snacktimemedia.net` (used on the pages below). Ask Claude to change it anytime, and update it in App Store Connect and Play Console too.
 - [ ] **Firebase public name.** Firebase console → Project settings → General → *Public-facing name* → `TwoCents`. This is the name in password-reset emails. Also review the templates under Authentication → Templates.
 - [x] **Website / marketing URL:** https://www.snacktimemedia.net/two-cents. Use it as the *Marketing URL* (Apple) and *Website* (Google Play). Link the privacy and support pages from it too, so people can find them from your site.
@@ -23,7 +23,7 @@ These are solid starting templates written to match how TwoCents actually works,
 
 ## 3. Developer accounts
 
-- [ ] **Apple Developer Program**, $99/year: developer.apple.com/programs. Enroll as an individual, or as a company if you form an LLC. Companies need a D-U-N-S number, which takes a few days.
+- [x] **Apple Developer Program**, $99/year: developer.apple.com/programs. Enroll as an individual, or as a company if you form an LLC. Companies need a D-U-N-S number, which takes a few days.
 - [ ] **Google Play Console**, a one-time $25: play.google.com/console. New personal accounts must run a **closed test with at least 12 testers for 14 days in a row** before they can publish publicly, so start recruiting friends early.
 
 ## 4. Building the apps
@@ -35,6 +35,49 @@ Steps:
 - [ ] `npx @capacitor/assets generate` creates every icon and splash size from `resources/`.
 - [ ] Build and install on real phones. Test recording, playback, sign up and sign in, and the microphone permission prompt.
 - [ ] **TestFlight** (iPhone) and **Internal testing** (Android) let friends install test versions.
+
+## iPhone: step by step on your Mac
+
+**One-time setup (about 30 minutes, mostly downloads)**
+1. Install **Xcode** from the Mac App Store (it's large). Open it once and accept the extra components.
+2. Install **Node.js LTS** from nodejs.org.
+3. Open **Terminal** and run each line:
+   ```sh
+   xcode-select --install          # skip if it says already installed
+   git clone https://github.com/ksproles/gopherturtle.git
+   cd gopherturtle
+   git checkout claude/charming-turing-mxz05f
+   npm install
+   npx cap sync ios
+   npx cap open ios
+   ```
+   Xcode opens the TwoCents project.
+4. In Xcode, go to **Settings → Accounts → +**, choose **Apple ID**, and sign in with your developer account.
+5. Click **App** in the left sidebar, then the **App** target, then **Signing & Capabilities**. Check **Automatically manage signing** and pick your **Team**. The Bundle Identifier should already say `snacktimemedia.twocents`.
+
+**Try it on your iPhone**
+6. Plug in your iPhone and unlock it. Tap **Trust** on the phone. If asked, turn on **Settings → Privacy & Security → Developer Mode** and restart the phone.
+7. In Xcode's top bar, choose your iPhone as the destination and press **▶ Run**. TwoCents installs and opens. Test sign-in, recording, playback and following.
+
+**Create the app in App Store Connect**
+8. Go to appstoreconnect.apple.com, then **Apps → + → New App**:
+   - Platform: iOS
+   - Name: TwoCents
+   - Language: English (U.S.)
+   - Bundle ID: `snacktimemedia.twocents` (it appears after step 5; if not, add it at developer.apple.com → Identifiers)
+   - SKU: `twocents-ios`
+   - Access: Full Access
+
+**Upload a build**
+9. In Xcode, set the destination to **Any iOS Device (arm64)**, then **Product → Archive**.
+10. When the Organizer window opens, choose **Distribute App → App Store Connect → Upload** and accept the defaults.
+11. After 10–30 minutes the build appears in App Store Connect under **TestFlight**. Add yourself and friends as testers and install it with the **TestFlight** app.
+
+**Submit for review**
+12. Fill in the listing from [STORE_LISTING.md](STORE_LISTING.md): text, screenshots, URLs, App Privacy, age rating and the review demo account.
+13. On the app's **1.0** page, pick the build under **Build**, then click **Add for Review → Submit**. Review usually takes 1–2 days. If Apple asks for changes, send their message to Claude.
+
+**Each later update:** Claude bumps the version. On the Mac, run `git pull`, `npm install` and `npx cap sync ios`, then archive and upload (steps 9–10), and submit the new version.
 
 ## 5. Store listings
 
