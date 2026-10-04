@@ -65,6 +65,33 @@ await test('you cannot change your handle by editing your profile', async () => 
   await assertFails(updateDoc(doc(db('alice'), 'users', 'alice'), { handle: 'bob' }));
 });
 
+console.log('Profile bio, link and photo');
+const prof = (uid, extra) => setDoc(doc(db(uid), 'users', uid), extra, { merge: true });
+await test('you can set a bio, link and photo from this app’s storage', async () => {
+  await assertSucceeds(prof('alice', { bio: 'Voice memo enthusiast 🎙️', link: 'https://example.com/me',
+    photoURL: 'https://firebasestorage.googleapis.com/v0/b/x/o/avatars%2Falice%2Favatar.jpg?alt=media&token=t&v=1' }));
+});
+await test('bios over 120 characters are refused', async () => {
+  await assertFails(prof('alice', { bio: 'x'.repeat(121) }));
+});
+await test('links must be web addresses', async () => {
+  await assertFails(prof('alice', { link: 'javascript:alert(1)' }));
+  await assertFails(prof('alice', { link: 'not a link' }));
+  await assertSucceeds(prof('alice', { link: '' }));
+});
+await test('photos must be stored in this app, not linked from elsewhere', async () => {
+  await assertFails(prof('alice', { photoURL: 'https://evil.example.com/tracker.png' }));
+});
+await test('you cannot edit someone else’s profile', async () => {
+  await assertFails(setDoc(doc(db('carol'), 'users', 'alice'), { bio: 'hacked' }, { merge: true }));
+});
+await test('profile photos: only you can upload yours, and only images', async () => {
+  await assertSucceeds(uploadBytes(ref(st('alice'), 'avatars/alice/avatar.jpg'), audio, { contentType: 'image/jpeg' }));
+  await assertFails(uploadBytes(ref(st('carol'), 'avatars/alice/avatar.jpg'), audio, { contentType: 'image/jpeg' }));
+  await assertFails(uploadBytes(ref(st('alice'), 'avatars/alice/avatar.jpg'), audio, { contentType: 'audio/mp4' }));
+  await assertSucceeds(getBytes(ref(st('carol'), 'avatars/alice/avatar.jpg')));
+});
+
 console.log('Follow requests');
 const request = (from, to) => setDoc(doc(db(from), 'followRequests', `${from}_${to}`), { requester: from, target: to, createdAt: serverTimestamp() });
 function approve(target, follower) {

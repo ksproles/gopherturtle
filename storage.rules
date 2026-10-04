@@ -15,6 +15,15 @@ service firebase.storage {
             && request.auth.uid in firestore.get(/databases/(default)/documents/users/$(author)/private/closeFriends).data.uids);
     }
 
+    // Profile photos: anyone signed in can see them; only you can change yours.
+    match /avatars/{uid}/{file} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
     match /audio/{uid}/{memoId} {
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.size < 25 * 1024 * 1024

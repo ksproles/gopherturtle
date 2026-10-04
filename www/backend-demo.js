@@ -48,6 +48,7 @@ const idb = (() => {
 
 export function createDemoBackend() {
   const me = { id: 'me', name: 'You', handle: 'you', color: '#2f6b4f' };
+  Object.assign(me, prefs.get('profile', {}));
   const people = [
     { id: 'u1', name: 'Maya Ortiz', handle: 'mayasays', color: '#c2553a', following: true, followsMe: true },
     { id: 'u2', name: 'Jonah Pike', handle: 'jonahp', color: '#3b6fb6', following: true, followsMe: true },
@@ -230,6 +231,15 @@ export function createDemoBackend() {
     },
     async unblock(id) { blocked.delete(id); prefs.set('blocked', [...blocked]); },
     async getBlocked() { return people.filter(p => blocked.has(p.id)); },
+
+    async updateProfile({ name, bio = '', link = '', photoBlob = null, removePhoto = false }) {
+      Object.assign(me, { name, bio, link });
+      if (photoBlob) {
+        me.photoURL = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(photoBlob); });
+      } else if (removePhoto) me.photoURL = '';
+      prefs.set('profile', { name: me.name, bio: me.bio, link: me.link, photoURL: me.photoURL || '' });
+      return me;
+    },
 
     async userCount() { return people.length + 1; },
     listAllUnder: 50,

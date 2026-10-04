@@ -115,7 +115,7 @@ function memoHTML(m, reason) {
   return `
     <li class="memo" data-aud="${m.audience}" data-id="${m.id}">
       <div class="memo-head">
-        <div class="avatar" style="--av:${u.color}" data-user="${esc(u.id)}">${esc(initials(u.name))}</div>
+        ${avatarHTML(u, true)}
         <div class="memo-who" data-user="${esc(u.id)}">
           <div class="memo-name">${esc(u.name)}</div>
           <div class="memo-meta">@${esc(u.handle)} · ${timeAgo(m.createdAt)}</div>
@@ -154,6 +154,35 @@ function renderList(el, memos, emptyText, reasons) {
     ? memos.map(m => memoHTML(m, reasons && reasons.get(m.id))).join('')
     : `<li class="empty">${emptyText}</li>`;
   if (player.memo) markPlaying(player.memo.id, true);
+}
+
+// Profile header pieces shared by your profile and other people's.
+function paintAvatar(el, u) {
+  el.style.setProperty('--av', u.color || '#7a857c');
+  el.innerHTML = u.photoURL ? `<img src="${esc(u.photoURL)}" alt="">` : esc(initials(u.name || '?'));
+}
+function linkLabel(url) {
+  try {
+    const x = new URL(url);
+    return (x.hostname.replace(/^www\./, '') + x.pathname.replace(/\/$/, '') + x.search).slice(0, 60);
+  } catch (e) { return url; }
+}
+function paintBioAndLink(bioEl, linkEl, u) {
+  bioEl.textContent = u.bio ? filterText(u.bio) : '';
+  bioEl.hidden = !u.bio;
+  const ok = u.link && /^https?:\/\//i.test(u.link);
+  linkEl.hidden = !ok;
+  if (ok) { linkEl.href = u.link; linkEl.textContent = linkLabel(u.link); }
+  else linkEl.removeAttribute('href');
+}
+
+// A person's avatar: their photo if they have one, otherwise initials on their color.
+function avatarHTML(u, linkable, extraClass = '') {
+  const attrs = linkable ? ` data-user="${esc(u.id)}"` : '';
+  const inner = u.photoURL
+    ? `<img src="${esc(u.photoURL)}" alt="" loading="lazy">`
+    : esc(initials(u.name || '?'));
+  return `<div class="avatar${extraClass}" style="--av:${esc(u.color || '#7a857c')}"${attrs}>${inner}</div>`;
 }
 
 function findMemo(id) {
@@ -251,7 +280,7 @@ function renderSuggestions() {
   box.hidden = !people.length;
   $('#suggestion-list').innerHTML = people.map(p => `
     <li class="suggestion">
-      <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
+      ${avatarHTML(p, true)}
       <div class="suggestion-name" data-user="${esc(p.id)}">${esc(p.name)}</div>
       <div class="suggestion-why">${esc(followedByText((state.signals.fof.get(p.id) || []).slice(0, 3)))}</div>
       ${followButtonHTML(p)}
@@ -264,7 +293,8 @@ function renderDiscover() {
     return;
   }
   renderSuggestions();
-  const ranked = rankDiscover(state.memos.filter(m => m.audience === 'global' && m.userId !== backend.me.id));
+  // Your own public memos are included too, so a new Global post shows up here.
+  const ranked = rankDiscover(state.memos.filter(m => m.audience === 'global'));
   renderList(discoverEl, ranked.map(r => r.m),
     'No public memos yet. Post one with the audience set to Global.',
     new Map(ranked.map(r => [r.m.id, r.reason])));
@@ -290,7 +320,7 @@ async function renderSearch() {
     $('#people').innerHTML = '<li class="search-hint">Search for people by name or @handle.</li>';
   } else $('#people').innerHTML = people.length ? people.map(p => `
     <li class="person" data-uid="${esc(p.id)}">
-      <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
+      ${avatarHTML(p, true)}
       <div class="memo-who" data-user="${esc(p.id)}">
         <div class="memo-name">${esc(p.name)}</div>
         <div class="memo-meta">@${esc(p.handle)}${p.close ? ' · <span class="cf-tag">Close friend</span>' : ''}</div>
@@ -310,10 +340,10 @@ async function renderSearch() {
 
 function renderProfile() {
   const me = backend.me;
-  $('#profile-avatar').style.setProperty('--av', me.color);
-  $('#profile-avatar').textContent = initials(me.name);
+  paintAvatar($('#profile-avatar'), me);
   $('#profile-name').textContent = me.name;
   $('#profile-handle').textContent = '@' + me.handle;
+  paintBioAndLink($('#profile-bio'), $('#profile-link'), me);
   // Your profile is what other people see, so close friends memos stay off it.
   const mine = sorted(state.memos.filter(m => m.userId === me.id && m.audience !== 'close'));
   $('#stat-memos').textContent = mine.length;
@@ -735,7 +765,7 @@ async function openCloseFriends() {
   $('#cf-list').innerHTML = people.length ? people.map(p => `
     <li>
       <label class="cf-item">
-        <div class="avatar" style="--av:${esc(p.color)}">${esc(initials(p.name))}</div>
+        ${avatarHTML(p)}
         <div class="memo-who">
           <div class="memo-name">${esc(p.name)}</div>
           <div class="memo-meta">@${esc(p.handle)}</div>
@@ -1028,6 +1058,7 @@ backdrop.addEventListener('click', () => {
   else if (!commentsSheet.hidden) closeComments();
   else if (!blockedSheet.hidden) closeBlocked();
   else if (!requestsSheet.hidden) closeRequests();
+  else if (!editSheet.hidden) closeEditProfile();
   else closeSheet();
 });
 document.addEventListener('keydown', e => {
@@ -1037,6 +1068,7 @@ document.addEventListener('keydown', e => {
   else if (!commentsSheet.hidden) closeComments();
   else if (!blockedSheet.hidden) closeBlocked();
   else if (!requestsSheet.hidden) closeRequests();
+  else if (!editSheet.hidden) closeEditProfile();
   else if (!cfSheet.hidden) closeCloseFriends();
   else if (!deleteSheet.hidden) closeDeleteSheet();
   else if (!sheet.hidden) closeSheet();
@@ -1144,7 +1176,7 @@ function commentHTML(c) {
   const u = c.author;
   return `
     <li class="comment" data-cid="${esc(c.id)}">
-      <div class="avatar" style="--av:${esc(u.color)}" data-user="${esc(u.id)}">${esc(initials(u.name))}</div>
+      ${avatarHTML(u, true)}
       <div class="comment-body">
         <div class="comment-meta"><b data-user="${esc(u.id)}">${esc(u.name)}</b> · ${timeAgo(c.createdAt)}</div>
         <p class="comment-text">${esc(filterText(c.text))}</p>
@@ -1251,7 +1283,7 @@ async function openBlocked() {
   catch (e) { $('#blocked-list').innerHTML = `<li class="empty">${esc(friendlyError(e))}</li>`; return; }
   $('#blocked-list').innerHTML = list.length ? list.map(p => `
     <li class="person">
-      <div class="avatar" style="--av:${esc(p.color)}">${esc(initials(p.name))}</div>
+      ${avatarHTML(p)}
       <div class="memo-who">
         <div class="memo-name">${esc(p.name)}</div>
         <div class="memo-meta">@${esc(p.handle)}</div>
@@ -1352,7 +1384,7 @@ async function renderPeopleList() {
   };
   $('#people-list').innerHTML = people.length ? people.map(p => `
     <li class="person" data-handle="${esc(p.handle)}">
-      <div class="avatar" style="--av:${esc(p.color)}" data-user="${esc(p.id)}">${esc(initials(p.name))}</div>
+      ${avatarHTML(p, true)}
       <div class="memo-who" data-user="${esc(p.id)}">
         <div class="memo-name">${esc(p.name)}${p.id === backend.me.id ? ' (you)' : ''}</div>
         <div class="memo-meta">@${esc(p.handle)}</div>
@@ -1395,6 +1427,8 @@ async function renderUserProfile() {
     $('#user-name').textContent = '';
     $('#user-handle').textContent = '';
     $('#user-avatar').textContent = '';
+    $('#user-bio').hidden = true;
+    $('#user-link').hidden = true;
     $('#user-actions').innerHTML = '';
     $('#user-note').hidden = true;
     $('#user-feed').innerHTML = '<li class="empty">Loading…</li>';
@@ -1412,8 +1446,8 @@ async function renderUserProfile() {
   if (u.following) state.following.add(u.id); else state.following.delete(u.id);
   if (u.requested) state.requested.add(u.id); else state.requested.delete(u.id);
   $('#user-feed').dataset.uid = userId;
-  $('#user-avatar').style.setProperty('--av', u.color);
-  $('#user-avatar').textContent = initials(u.name);
+  paintAvatar($('#user-avatar'), u);
+  paintBioAndLink($('#user-bio'), $('#user-link'), u);
   $('#user-name').textContent = u.name;
   $('#user-handle').textContent = '@' + u.handle;
   state.profileMemos = prof.memos;
@@ -1471,7 +1505,7 @@ async function loadRequests() {
 function renderRequests() {
   $('#request-list').innerHTML = state.requests.length ? state.requests.map(r => `
     <li class="person">
-      <div class="avatar" style="--av:${esc(r.user.color)}" data-user="${esc(r.user.id)}">${esc(initials(r.user.name))}</div>
+      ${avatarHTML(r.user, true)}
       <div class="memo-who" data-user="${esc(r.user.id)}">
         <div class="memo-name">${esc(r.user.name)}</div>
         <div class="memo-meta">@${esc(r.user.handle)} · ${timeAgo(r.createdAt)}</div>
@@ -1564,6 +1598,117 @@ screensRoot.addEventListener('touchend', async () => {
   ptr.busy = false;
 });
 screensRoot.addEventListener('touchcancel', () => { ptr.startY = null; ptr.el.classList.add('is-settling'); ptrSet(0); });
+
+// ---------- Edit profile ----------
+const editSheet = $('#edit-sheet');
+const edit = { photoBlob: null, removePhoto: false, previewUrl: null };
+
+// Crop to a centered square and shrink to 400×400 JPEG before uploading.
+function squareJpeg(file, size = 400) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(img,
+        (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Could not read that image.'))), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file isn’t an image we can use. Try a JPEG or PNG.')); };
+    img.src = url;
+  });
+}
+function paintEditAvatar() {
+  const me = backend.me;
+  const shown = edit.previewUrl ? { ...me, photoURL: edit.previewUrl }
+    : edit.removePhoto ? { ...me, photoURL: '' } : me;
+  paintAvatar($('#edit-avatar'), shown);
+  $('#edit-photo-remove').hidden = !shown.photoURL;
+}
+function syncBioCount() {
+  $('#edit-bio-count').textContent = `${$('#edit-bio').value.length}/120`;
+}
+function openEditProfile() {
+  const me = backend.me;
+  if (edit.previewUrl) URL.revokeObjectURL(edit.previewUrl);
+  Object.assign(edit, { photoBlob: null, removePhoto: false, previewUrl: null });
+  $('#edit-name').value = me.name || '';
+  $('#edit-bio').value = me.bio || '';
+  $('#edit-link').value = me.link || '';
+  $('#edit-error').hidden = true;
+  $('#edit-photo-input').value = '';
+  syncBioCount();
+  paintEditAvatar();
+  editSheet.hidden = false;
+  backdrop.hidden = false;
+}
+function closeEditProfile() {
+  editSheet.hidden = true;
+  backdrop.hidden = true;
+}
+function editError(msg) {
+  $('#edit-error').textContent = msg;
+  $('#edit-error').hidden = false;
+}
+// Accepts "mysite.com" and adds https:// so links always open correctly.
+function normalizeLink(raw) {
+  const v = raw.trim();
+  if (!v) return '';
+  const withScheme = /^https?:\/\//i.test(v) ? v : 'https://' + v;
+  try {
+    const u = new URL(withScheme);
+    if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.')) return null;
+    return u.href.length <= 200 ? u.href : null;
+  } catch (e) { return null; }
+}
+$('#edit-profile').addEventListener('click', openEditProfile);
+$('#edit-cancel').addEventListener('click', closeEditProfile);
+$('#edit-bio').addEventListener('input', syncBioCount);
+$('#edit-photo-input').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try {
+    edit.photoBlob = await squareJpeg(file);
+    edit.removePhoto = false;
+    if (edit.previewUrl) URL.revokeObjectURL(edit.previewUrl);
+    edit.previewUrl = URL.createObjectURL(edit.photoBlob);
+    $('#edit-error').hidden = true;
+    paintEditAvatar();
+  } catch (err) { editError(err.message); }
+});
+$('#edit-photo-remove').addEventListener('click', () => {
+  if (edit.previewUrl) URL.revokeObjectURL(edit.previewUrl);
+  Object.assign(edit, { photoBlob: null, removePhoto: true, previewUrl: null });
+  $('#edit-photo-input').value = '';
+  paintEditAvatar();
+});
+async function saveProfile() {
+  const name = $('#edit-name').value.trim();
+  const bio = $('#edit-bio').value.trim();
+  const link = normalizeLink($('#edit-link').value);
+  if (!name) return editError('Enter your name.');
+  if (bio.length > 120) return editError('Keep your bio to 120 characters.');
+  if (link === null) return editError('That link doesn’t look right. Try something like https://yourwebsite.com');
+  const btn = $('#edit-save');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    await backend.updateProfile({ name, bio, link, photoBlob: edit.photoBlob, removePhoto: edit.removePhoto });
+    closeEditProfile();
+    render();
+    toast('Profile updated');
+  } catch (err) {
+    console.error(err);
+    editError(friendlyError(err));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Save';
+}
+$('#edit-save').addEventListener('click', saveProfile);
+$('#edit-form').addEventListener('submit', e => { e.preventDefault(); saveProfile(); });
 
 // ---------- Account ----------
 const deleteSheet = $('#delete-sheet');

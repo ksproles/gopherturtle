@@ -8,6 +8,12 @@ service cloud.firestore {
     function me() { return request.auth.uid; }
     function validHandle(h) { return h is string && h.matches('^[a-z0-9_]{3,20}$'); }
     function validName(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+    function validBio(b) { return b is string && b.size() <= 120; }
+    function validLink(l) { return l == '' || (l is string && l.size() <= 200 && l.matches('^https?://[^ ]+$')); }
+    function validPhoto(p) {
+      return p == '' || (p is string && p.size() <= 1000
+        && p.matches('^(https://firebasestorage[.]googleapis[.]com/|http://(127[.]0[.]0[.]1|localhost):9199/).*'));
+    }
     // Who can hear a memo: its author; everyone for global; approved followers
     // for followers-only; people on the author's close friends list for close.
     // Access follows the current relationship, so it ends when a follow is
@@ -31,10 +37,15 @@ service cloud.firestore {
         && validHandle(request.resource.data.handle)
         && getAfter(/databases/$(database)/documents/handles/$(request.resource.data.handle)).data.uid == uid
         && request.resource.data.createdAt == request.time;
+      // You can change your name, bio (120 max), link (a web address) and photo
+      // (only an image stored in this app's own storage). Not your handle.
       allow update: if signedIn() && me() == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'nameLower', 'color'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'nameLower', 'color', 'bio', 'link', 'photoURL'])
         && validName(request.resource.data.name)
-        && request.resource.data.nameLower == request.resource.data.name.lower();
+        && request.resource.data.nameLower == request.resource.data.name.lower()
+        && validBio(request.resource.data.get('bio', ''))
+        && validLink(request.resource.data.get('link', ''))
+        && validPhoto(request.resource.data.get('photoURL', ''));
       allow delete: if signedIn() && me() == uid;
 
       // Private data such as the close friends list: only the owner, ever.

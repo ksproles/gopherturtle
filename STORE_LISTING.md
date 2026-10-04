@@ -79,9 +79,10 @@ Data collection: **Yes**.
 | Name | Yes | Yes | No | App functionality |
 | User ID | Yes | Yes | No | App functionality |
 | Audio data (voice memos) | Yes | Yes | No | App functionality |
-| Other user content (captions, comments) | Yes | Yes | No | App functionality |
+| Photos (profile photo, optional) | Yes | Yes | No | App functionality |
+| Other user content (captions, comments, bio) | Yes | Yes | No | App functionality |
 
-Not collected: location, contacts, photos, browsing history, purchases, diagnostics, advertising data. No third-party tracking.
+Not collected: location, contacts, browsing history, purchases, diagnostics, advertising data. No third-party tracking.
 
 ## Age rating answers
 

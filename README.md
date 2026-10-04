@@ -13,7 +13,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 - When a memo finishes, the next one in the list plays automatically.
 - **Playback speed:** press and hold any play button to pick 1×, 1.25×, 1.5× or 2×. The speed applies to every memo and is remembered. Cards show the speed when it isn't 1×.
 
-**Discover**: public (global) memos from everyone, ranked for you. The ranking favors people followed by people you follow, people whose memos you've liked or listened to, popular memos (likes and comments) and recent ones. Memos you've already heard and memos from people you already follow (they're on Home) rank lower. Each card says why it was picked ("Followed by Maya", "Popular on TwoCents"), and a "People you might like" row suggests accounts to follow. Listening history is kept on the device.
+**Discover**: public (global) memos from everyone, including your own, ranked for you. The ranking favors people followed by people you follow, people whose memos you've liked or listened to, popular memos (likes and comments) and recent ones. Memos you've already heard and memos from people you already follow (they're on Home) rank lower. Each card says why it was picked ("Followed by Maya", "Popular on TwoCents"), and a "People you might like" row suggests accounts to follow. Listening history is kept on the device.
 
 **Bottom bar**: Home · Discover · Post · Search · Profile
 
@@ -38,7 +38,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Search**: find people, follow or unfollow them, and search memo captions. While there are 50 or fewer people on TwoCents, Search lists everyone; after that it waits for you to type a name or @handle.
 
-**Profile**: your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
+**Profile**: a photo, a bio (up to 120 characters) and an optional link, all set from **Edit profile**; your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
 
 **Accounts (optional)**: with Firebase turned on, people sign up with email, a name and a unique @handle, and memos are shared for real. Without it, the app runs in demo mode with example people. See [Turning on accounts](#turning-on-accounts-firebase).
 
@@ -76,7 +76,7 @@ npx cap open ios   # opens Xcode (Mac only), then press Run
 npx cap open android
 ```
 
-Microphone permission is already declared on both platforms (`NSMicrophoneUsageDescription` on iOS, `RECORD_AUDIO` on Android).
+Microphone permission is already declared on both platforms (`NSMicrophoneUsageDescription` on iOS, `RECORD_AUDIO` on Android). Camera and photo library permissions (`NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`) are declared for profile photos.
 
 ## Turning on accounts (Firebase)
 
@@ -101,6 +101,7 @@ The rules in `firestore.rules` and `storage.rules` run on Google's servers, so t
 - **Close friends lists** are stored under your account and only you can read or change them. Memos to close friends are delivered to each person individually, so nobody can see who else got one.
 - **Follows need approval**: a follow only exists once the person being followed approves the request.
 - **Followers-only memos** can be heard only by approved followers, and **close friends memos** only by people currently on the author's list, checked every time (not just when posted).
+- **Profile photos** can only be uploaded by their owner (images under 2 MB), bios are capped at 120 characters, and links must start with http:// or https://.
 - **Audio files** can only be downloaded by people allowed to hear that memo.
 - Likes can only go up or down by one per person, and only the author can edit or delete a memo.
 - Only people who can hear a memo can read or write its comments. Blocked people can't comment on your memos, follow you, or deliver memos to you.
@@ -131,7 +132,7 @@ With automatic updates set up, rules changes are published on every push. Withou
 ```sh
 npm run emulators                 # local Auth, Firestore and Storage
 # open http://127.0.0.1:5000/?emulators
-npm run test:rules                # 71 checks of who can read and write what
+npm run test:rules                # 77 checks of who can read and write what
 ```
 
 ### Known limits (fine to launch with, worth improving later)

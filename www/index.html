@@ -75,6 +75,8 @@
           <p class="profile-handle" id="user-handle"></p>
         </div>
       </div>
+      <p class="profile-bio" id="user-bio" hidden></p>
+      <a class="profile-link" id="user-link" target="_blank" rel="noopener nofollow ugc" hidden></a>
       <dl class="stats">
         <div><dt>Memos</dt><dd id="user-stat-memos">–</dd></div>
         <div class="stat-link" role="button" tabindex="0" data-list="followers" data-list-of="user"><dt>Followers</dt><dd id="user-stat-followers">–</dd></div>
@@ -109,11 +111,14 @@
     <section class="screen" id="screen-profile" aria-label="Your profile" hidden>
       <div class="profile-head">
         <div class="avatar avatar-lg" id="profile-avatar"></div>
-        <div>
+        <div class="profile-who">
           <h2 class="profile-name" id="profile-name"></h2>
           <p class="profile-handle" id="profile-handle"></p>
         </div>
       </div>
+      <p class="profile-bio" id="profile-bio" hidden></p>
+      <a class="profile-link" id="profile-link" target="_blank" rel="noopener nofollow ugc" hidden></a>
+      <button class="ghost-btn edit-profile-btn" id="edit-profile">Edit profile</button>
       <dl class="stats">
         <div><dt>Memos</dt><dd id="stat-memos">0</dd></div>
         <div class="stat-link" role="button" tabindex="0" data-list="followers" data-list-of="me"><dt>Followers</dt><dd id="stat-followers">–</dd></div>
@@ -261,6 +266,39 @@
       <label class="visually-hidden" for="comment-input">Add a comment</label>
       <input id="comment-input" type="text" maxlength="280" placeholder="Add a comment…" autocomplete="off" enterkeyhint="send">
       <button class="send-btn" id="comment-send" type="submit" disabled>Post</button>
+    </form>
+  </section>
+
+  <!-- Edit profile -->
+  <section class="sheet" id="edit-sheet" role="dialog" aria-modal="true" aria-labelledby="edit-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <button class="text-btn" id="edit-cancel">Cancel</button>
+      <h2 id="edit-title">Edit profile</h2>
+      <button class="text-btn text-btn-end" id="edit-save">Save</button>
+    </header>
+    <form class="form" id="edit-form" novalidate>
+      <div class="edit-photo">
+        <div class="avatar avatar-lg" id="edit-avatar"></div>
+        <div class="edit-photo-actions">
+          <label class="ghost-btn" for="edit-photo-input">Change photo</label>
+          <input id="edit-photo-input" type="file" accept="image/*" hidden>
+          <button type="button" class="link-btn" id="edit-photo-remove">Remove photo</button>
+        </div>
+      </div>
+      <label class="field">
+        <span>Name</span>
+        <input id="edit-name" type="text" maxlength="40" autocomplete="name">
+      </label>
+      <label class="field">
+        <span>Bio <em class="field-count" id="edit-bio-count">0/120</em></span>
+        <textarea id="edit-bio" maxlength="120" rows="3" placeholder="A line about you"></textarea>
+      </label>
+      <label class="field">
+        <span>Link <em>(optional)</em></span>
+        <input id="edit-link" type="url" maxlength="200" inputmode="url" autocapitalize="none" spellcheck="false" placeholder="https://yourwebsite.com">
+      </label>
+      <p class="form-error" id="edit-error" role="alert" hidden></p>
     </form>
   </section>
 

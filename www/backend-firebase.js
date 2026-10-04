@@ -2,7 +2,7 @@
 // Implements the same interface as backend-demo.js.
 //
 // Data model (enforced by firestore.rules / storage.rules):
-//   users/{uid}                      public profile {name, nameLower, handle, color, createdAt}
+//   users/{uid}                      public profile {name, nameLower, handle, color, createdAt, bio?, link?, photoURL?}
 //   users/{uid}/private/closeFriends {uids: [...]}  readable by the owner only
 //   handles/{handle}                 {uid}  keeps handles unique
 //   followRequests/{requester_target} {requester, target, createdAt}  pending follow requests
@@ -14,7 +14,7 @@
 //   users/{uid}/blocked/{otherUid}   {createdAt}  people you've blocked (owner only)
 //   reports/{id}                     write-only; reviewed in the Firebase console
 //   amplifies/{uid_memoId}           {uid, memoId, authorId, createdAt}  reposts of public memos
-//   Storage: audio/{uid}/{memoId}
+//   Storage: audio/{uid}/{memoId}, avatars/{uid}/avatar.jpg
 import {
   initializeApp,
   initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, connectAuthEmulator,
@@ -501,6 +501,25 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     },
     listAllUnder: LIST_ALL_UNDER,
 
+    // Name, bio (120 max), link and profile photo.
+    async updateProfile({ name, bio = '', link = '', photoBlob = null, removePhoto = false }) {
+      const id = uid();
+      const upd = { name: name.trim(), nameLower: name.trim().toLowerCase(), bio: bio.trim().slice(0, 120), link };
+      const photoRef = ref(storage, `avatars/${id}/avatar.jpg`);
+      if (photoBlob) {
+        await uploadBytes(photoRef, photoBlob, { contentType: 'image/jpeg' });
+        // The version number makes phones show the new photo instead of a cached old one.
+        upd.photoURL = `${await getDownloadURL(photoRef)}&v=${Date.now()}`;
+      } else if (removePhoto) {
+        await deleteObject(photoRef).catch(e => { if (e.code !== 'storage/object-not-found') throw e; });
+        upd.photoURL = '';
+      }
+      await setDoc(doc(db, 'users', id), upd, { merge: true });
+      Object.assign(me, upd);
+      users.set(id, me);
+      return me;
+    },
+
     async getFollowing() { await loadRelations().catch(() => {}); return new Set(following); },
 
     // Signals for ranking Discover: who the people you follow follow.
@@ -578,6 +597,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       await Promise.all(myComments.docs.map(s => deleteDoc(s.ref)));
       const bl = await getDocs(collection(db, 'users', id, 'blocked'));
       await Promise.all(bl.docs.map(s => deleteDoc(s.ref)));
+      await deleteObject(ref(storage, `avatars/${id}/avatar.jpg`)).catch(() => {});
       if (me && me.handle) await deleteDoc(doc(db, 'handles', me.handle));
       await deleteDoc(doc(db, 'users', id));
       await deleteUser(user);
