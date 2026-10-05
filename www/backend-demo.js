@@ -261,6 +261,8 @@ export function createDemoBackend() {
     async closeFriendCandidates() {
       return people.filter(p => !blocked.has(p.id) && (following.has(p.id) || p.followsMe || closeIds.has(p.id))).map(relation);
     },
+    async getListened() { return []; },
+    async saveListened() {},
     async getCloseFriends() { return new Set(closeIds); },
     async setCloseFriends(ids) { closeIds = new Set(ids); prefs.set('closeFriends', [...closeIds]); },
 

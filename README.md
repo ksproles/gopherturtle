@@ -10,7 +10,8 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 - Home shows everything from people you follow (followers-only and global memos), close friends memos sent to you, and your own memos, newest first.
 - Two color-coded filters: **Close friends** (green) and **Following** (blue, everyone you follow). Tap one to narrow the list; tap it again to see both.
 - Each memo card carries its audience color: a stripe down the side, a badge, a play button, and a waveform that fills in as it plays.
-- When a memo finishes, the next one in the list plays automatically.
+- When a memo finishes, the next one in the list you haven't heard yet plays automatically.
+- **Listened:** once you've heard most of a memo, it's marked **✓ Listened** and its play button turns lighter. Auto-play skips listened memos, but you can always tap to replay one. The list is saved privately to your account (`users/{uid}/private/listened`), so it carries over to your other devices.
 - **Playback speed:** press and hold any play button to pick 1×, 1.25×, 1.5× or 2×. The speed applies to every memo and is remembered. Cards show the speed when it isn't 1×.
 
 **Discover**: public (global) memos from everyone, including your own, ranked for you. The ranking favors people followed by people you follow, people whose memos you've liked or listened to, popular memos (likes and comments) and recent ones. Memos you've already heard and memos from people you already follow (they're on Home) rank lower. Each card says why it was picked ("Followed by Maya", "Popular on TwoCents"), and a "People you might like" row suggests accounts to follow. Listening history is kept on the device.
@@ -132,7 +133,7 @@ With automatic updates set up, rules changes are published on every push. Withou
 ```sh
 npm run emulators                 # local Auth, Firestore and Storage
 # open http://127.0.0.1:5000/?emulators
-npm run test:rules                # 77 checks of who can read and write what
+npm run test:rules                # 78 checks of who can read and write what
 ```
 
 ### Known limits (fine to launch with, worth improving later)

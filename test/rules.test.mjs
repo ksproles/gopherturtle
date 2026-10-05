@@ -410,6 +410,14 @@ await test('the author can delete a memo', async () => {
   await assertSucceeds(deleteDoc(doc(db('bob'), 'memos', 'm-followers')));
 });
 
+console.log('Listened memos');
+await test('your listened list is private to you', async () => {
+  await assertSucceeds(setDoc(doc(db('alice'), 'users', 'alice', 'private', 'listened'), { ids: ['m-global'] }));
+  await assertSucceeds(getDoc(doc(db('alice'), 'users', 'alice', 'private', 'listened')));
+  await assertFails(getDoc(doc(db('bob'), 'users', 'alice', 'private', 'listened')));
+  await assertFails(setDoc(doc(db('bob'), 'users', 'alice', 'private', 'listened'), { ids: [] }));
+});
+
 await env.cleanup();
 console.log(`\n${passed} passed${process.exitCode ? ', some failed' : ''}`);
 assert.ok(!process.exitCode);

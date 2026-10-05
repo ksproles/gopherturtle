@@ -52,8 +52,16 @@ export function friendlyError(e) {
     'permission-denied': 'You don’t have access to that.',
     'failed-precondition': 'The database is still getting ready. Try again in a few minutes.',
     'unavailable': 'Can’t reach the server. Check your connection.',
+    'storage/unauthorized': 'TwoCents couldn’t save that file. Sign out and back in, then try again.',
+    'storage/unauthenticated': 'You’ve been signed out. Sign in again and try again.',
+    'storage/retry-limit-exceeded': 'Upload timed out. Check your connection and try again.',
+    'storage/canceled': 'Upload was canceled. Try again.',
+    'storage/quota-exceeded': 'TwoCents is out of storage space right now. Please tell us at owner@snacktimemedia.net.',
   };
-  return (e && (e instanceof BackendError ? e.message : map[e.code])) || 'Something went wrong. Try again.';
+  if (e && e instanceof BackendError) return e.message;
+  if (e && map[e.code]) return map[e.code];
+  // Include the error code so a screenshot tells us what went wrong.
+  return e && e.code ? `Something went wrong (${e.code}). Try again.` : 'Something went wrong. Try again.';
 }
 
 export function createFirebaseBackend(config, { emulators = false } = {}) {
@@ -62,6 +70,9 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
   const auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
   const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
   const storage = getStorage(app);
+  // Give up after a minute instead of the default 10, so a stuck post shows an error.
+  storage.maxUploadRetryTime = 60 * 1000;
+  storage.maxOperationRetryTime = 60 * 1000;
   if (emulators) {
     const host = location.hostname || '127.0.0.1';
     connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true });
@@ -70,6 +81,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
   }
 
   let me = null;              // public profile of the signed-in user
+  let signingUp = false;      // true while sign-up creates the account and profile
   let following = new Set();  // uids I follow
   let closeIds = new Set();   // my private close friends list
   let blocked = new Set();    // uids I've blocked
@@ -117,9 +129,14 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       .map(u => ({ ...u, ...relationTo(u) }));
   }
 
+  // Only the latest load counts, so a slow earlier one can't undo a newer one
+  // (for example, right after sign-up creates your profile).
+  let selfSeq = 0;
   async function loadSelf() {
     const id = uid();
+    const seq = ++selfSeq;
     const snap = await getDoc(doc(db, 'users', id));
+    if (seq !== selfSeq) return me;
     if (!snap.exists()) { me = null; return null; }
     me = { id, ...snap.data() };
     users.set(id, me);
@@ -204,6 +221,8 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     init(onUser) {
       onAuthStateChanged(auth, async user => {
         if (!user) { me = null; users.clear(); memoCache.clear(); onUser(null); return; }
+        // Sign-up finishes creating the profile itself and then opens the app.
+        if (signingUp) return;
         try {
           const profile = await loadSelf();
           onUser(profile || { needsProfile: true, email: user.email });
@@ -223,8 +242,13 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       handle = handle.trim().toLowerCase();
       if (!HANDLE_RE.test(handle)) throw new BackendError('bad-handle', 'Handles use 3–20 lowercase letters, numbers or _.');
       if (!(await api.handleAvailable(handle))) throw new BackendError('handle-taken', `@${handle} is taken. Try another.`);
-      await createUserWithEmailAndPassword(auth, email.trim(), password);
-      return api.createProfile({ name, handle });
+      signingUp = true;
+      try {
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        return await api.createProfile({ name, handle });
+      } finally {
+        signingUp = false;
+      }
     },
 
     async createProfile({ name, handle }) {
@@ -558,6 +582,15 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
         .map(u => ({ ...u, ...relationTo(u) }));
     },
     async getCloseFriends() { return new Set(closeIds); },
+
+    // Memos you've listened to, kept privately on your account.
+    async getListened() {
+      const snap = await getDoc(doc(db, 'users', uid(), 'private', 'listened'));
+      return snap.exists() ? snap.data().ids || [] : [];
+    },
+    async saveListened(ids) {
+      await setDoc(doc(db, 'users', uid(), 'private', 'listened'), { ids: ids.slice(-1000) });
+    },
     async setCloseFriends(ids) {
       const next = [...new Set(ids)];
       await setDoc(doc(db, 'users', uid(), 'private', 'closeFriends'), { uids: next });
@@ -585,6 +618,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       ]);
       await Promise.all([...out.docs, ...inc.docs, ...inbox.docs, ...reqOut.docs, ...reqIn.docs].map(s => deleteDoc(s.ref)));
       await deleteDoc(doc(db, 'users', id, 'private', 'closeFriends'));
+      await deleteDoc(doc(db, 'users', id, 'private', 'listened'));
       const myAmps = await getDocs(query(collection(db, 'amplifies'), where('uid', '==', id)));
       for (const a of myAmps.docs) {
         const memoRef = doc(db, 'memos', a.data().memoId);

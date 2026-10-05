@@ -107,18 +107,20 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l
 const ICON_MORE = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>';
 
+const HEARD_TAG = ' · <span class="heard-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Listened</span>';
 function memoHTML(m, reason) {
   const u = m.author;
   const mine = m.userId === backend.me.id;
   const aud = AUDIENCES[m.audience];
   const bars = m.peaks.map(p => `<i style="height:${Math.round(12 + p * 88)}%"></i>`).join('');
+  const heard = !mine && isHeard(m);
   return `
-    <li class="memo" data-aud="${m.audience}" data-id="${m.id}">
+    <li class="memo${heard ? ' is-heard' : ''}" data-aud="${m.audience}" data-id="${m.id}">
       <div class="memo-head">
         ${avatarHTML(u, true)}
         <div class="memo-who" data-user="${esc(u.id)}">
           <div class="memo-name">${esc(u.name)}</div>
-          <div class="memo-meta">@${esc(u.handle)} · ${timeAgo(m.createdAt)}</div>
+          <div class="memo-meta">@${esc(u.handle)} · ${timeAgo(m.createdAt)}${heard ? HEARD_TAG : ''}</div>
         </div>
         <span class="aud-badge">${aud.label}</span>
       </div>
@@ -226,17 +228,41 @@ function renderHome() {
 // people whose memos you've liked or listened to, popularity and freshness.
 // Memos you've already heard, and memos from people you already follow
 // (they're on Home), sink lower.
+// The same list marks memos as "Listened" and makes auto-play skip them.
+// It's saved to your account so it follows you to other devices.
 const listening = {
-  heard: new Set(prefs.get('heard', [])),
+  heard: new Set(),
   plays: prefs.get('authorPlays', {}),
+  saveTimer: 0,
   record(m) {
     if (this.heard.has(m.id)) return;
     this.heard.add(m.id);
     this.plays[m.userId] = (this.plays[m.userId] || 0) + 1;
-    prefs.set('heard', [...this.heard].slice(-500));
+    prefs.set(this.key(), [...this.heard].slice(-1000));
     prefs.set('authorPlays', this.plays);
+    cardsFor(m.id).forEach(markHeardCard);
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      if (backend && backend.me) backend.saveListened([...this.heard].slice(-1000)).catch(e => console.warn('Couldn’t save listened memos', e));
+    }, 1500);
+  },
+  key() { return 'heard.' + backend.me.id; },
+  // Load this account's list from the device, then merge in other devices'.
+  async sync() {
+    this.heard = new Set(prefs.get(this.key(), []));
+    const ids = await backend.getListened();
+    const before = this.heard.size;
+    ids.forEach(id => this.heard.add(id));
+    prefs.set(this.key(), [...this.heard].slice(-1000));
+    return this.heard.size !== before;
   },
 };
+function isHeard(m) { return listening.heard.has(m.id); }
+function markHeardCard(card) {
+  card.classList.add('is-heard');
+  const meta = card.querySelector('.memo-meta');
+  if (meta && !meta.querySelector('.heard-tag')) meta.insertAdjacentHTML('beforeend', HEARD_TAG);
+}
 
 function followedByText(names) {
   if (names.length === 1) return `Followed by ${names[0]}`;
@@ -505,16 +531,21 @@ function stopPlayback() {
 audio.addEventListener('ended', () => {
   if (audio.src.startsWith('data:')) return; // the silent placeholder, not a memo
   const m = player.memo;
+  if (m && m.userId !== backend.me.id) listening.record(m);
   stopPlayback();
-  // Keep scrolling hands-free: play the next memo in the visible feed.
+  // Keep scrolling hands-free: play the next memo in the visible feed you
+  // haven't listened to yet (your own memos are skipped too).
   const listEl = { home: feedEl, discover: discoverEl }[state.screen];
   if (m && listEl) {
-    const card = listEl.querySelector(`.memo[data-id="${CSS.escape(m.id)}"]`);
-    const next = card && card.nextElementSibling;
-    if (next && next.dataset.id) {
-      next.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const nm = findMemo(next.dataset.id);
-      if (nm) togglePlay(nm);
+    let card = listEl.querySelector(`.memo[data-id="${CSS.escape(m.id)}"]`);
+    let nm = null;
+    while (card && (card = card.nextElementSibling)) {
+      const c = card.dataset.id && findMemo(card.dataset.id);
+      if (c && !isHeard(c) && c.userId !== backend.me.id) { nm = c; break; }
+    }
+    if (nm) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      togglePlay(nm);
     }
   }
 });
@@ -542,7 +573,7 @@ const cctx = canvas.getContext('2d');
 const preview = new Audio();
 
 function openSheet() {
-  if (!backend || !backend.me) return; // not signed in or still loading
+  if (!backend || !backend.me) { toast('Still loading your account. Try again in a moment.'); return; }
   stopPlayback();
   resetRecorder();
   sheet.hidden = false;
@@ -715,7 +746,12 @@ function syncAudienceColor() {
 }
 
 async function submitPost() {
-  if (!rec.blob || !backend || !backend.me) return;
+  if (!backend || !backend.me) { toast('Still loading your account. Try again in a moment.'); return; }
+  if (!rec.blob || !rec.blob.size) {
+    recNote.textContent = 'That recording came out empty. Tap Redo and record again.';
+    recNote.hidden = false;
+    return;
+  }
   const btn = $('#post-submit');
   btn.disabled = true;
   btn.textContent = 'Posting…';
@@ -1813,6 +1849,9 @@ authForm.addEventListener('submit', async e => {
     }
   } catch (err) {
     console.error(err);
+    // The account was made but the profile wasn't (say, the handle was just taken):
+    // finish on the profile step instead of trying to sign up again.
+    if (mode === 'signup' && backend.signedIn && !backend.me) setAuthMode('profile');
     authError(friendlyError(err));
     // The account exists but the handle step failed: finish it on the profile step.
     if (mode === 'signup' && backend.me == null && backend.signedIn) setAuthMode('profile');
@@ -1855,6 +1894,9 @@ function onSignedIn() {
   urlCache.clear();
   render();
   backend.getCloseFriends().then(ids => { state.closeCount = ids.size; }).catch(() => {});
+  listening.sync()
+    .then(changed => { if (changed && !state.loading && sheet.hidden && ['home', 'discover'].includes(state.screen)) render(); })
+    .catch(e => console.warn('Couldn’t load listened memos', e));
   refreshFeed();
 }
 
