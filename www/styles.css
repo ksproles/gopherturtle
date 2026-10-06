@@ -857,3 +857,50 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Tags ---------- */
+.memo-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag-pill {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--aud-soft);
+  color: var(--aud);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.tag-filter {
+  display: flex; gap: 8px;
+  margin: 0 -16px 12px; padding: 2px 16px;
+  overflow-x: auto; scrollbar-width: none;
+  scroll-margin-top: calc(env(safe-area-inset-top, 0px) + var(--top-h) + 12px);
+}
+.tag-filter::-webkit-scrollbar { display: none; }
+.tag-chip {
+  flex: none;
+  padding: 7px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.tag-chip span { margin-left: 6px; color: var(--ink-2); font-weight: 600; }
+.tag-chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--surface); }
+.tag-chip[aria-pressed="true"] span { color: inherit; opacity: .75; }
+.tag-chip:disabled { opacity: .4; }
+.tag-picker { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; min-width: 0; }
+.tag-picker legend { margin-bottom: 8px; padding: 0; font-weight: 700; }
+.tag-picker legend em { color: var(--ink-2); font-style: normal; font-weight: 500; }
+.tag-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-add { display: flex; gap: 8px; }
+.tag-add input {
+  flex: 1; min-width: 0;
+  padding: 10px 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  font-weight: 500;
+}

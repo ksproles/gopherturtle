@@ -410,6 +410,24 @@ await test('the author can delete a memo', async () => {
   await assertSucceeds(deleteDoc(doc(db('bob'), 'memos', 'm-followers')));
 });
 
+console.log('Memo tags');
+await test('a memo can have up to 3 tags', async () => {
+  await assertSucceeds(setDoc(doc(db('bob'), 'memos', 't1'), memoData('bob', 't1', 'global', { tags: ['Funny story', 'Life update', 'Music'] })));
+});
+await test('memos without tags still work (older app versions)', async () => {
+  await assertSucceeds(setDoc(doc(db('bob'), 'memos', 't2'), memoData('bob', 't2', 'global')));
+});
+await test('no more than 3 tags, none empty or longer than 24 characters', async () => {
+  await assertFails(setDoc(doc(db('bob'), 'memos', 't3'), memoData('bob', 't3', 'global', { tags: ['a', 'b', 'c', 'd'] })));
+  await assertFails(setDoc(doc(db('bob'), 'memos', 't4'), memoData('bob', 't4', 'global', { tags: [''] })));
+  await assertFails(setDoc(doc(db('bob'), 'memos', 't5'), memoData('bob', 't5', 'global', { tags: ['x'.repeat(25)] })));
+  await assertFails(setDoc(doc(db('bob'), 'memos', 't6'), memoData('bob', 't6', 'global', { tags: 'Funny story' })));
+  await assertFails(setDoc(doc(db('bob'), 'memos', 't7'), memoData('bob', 't7', 'global', { tags: ['ok', 7] })));
+});
+await test('tags can’t be changed by other people', async () => {
+  await assertFails(setDoc(doc(db('alice'), 'memos', 't1'), { tags: ['spam'] }, { merge: true }));
+});
+
 console.log('Listened memos');
 await test('your listened list is private to you', async () => {
   await assertSucceeds(setDoc(doc(db('alice'), 'users', 'alice', 'private', 'listened'), { ids: ['m-global'] }));

@@ -23,6 +23,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 2. Tap the red button to record (up to 5 minutes) and tap again to stop.
 3. Play it back or redo it.
 4. Choose who can hear it: **Close friends**, **Followers only**, or **Global**. Add an optional caption.
+   Add up to 3 **tags** so people know what it's about: pick from suggestions (Funny story, Life update, Good news, Hot take…), tags you've used before, or type your own (up to 24 characters).
 5. Tap **Post**.
 
 **Close friends are private.** Your close friends list is only visible to you. You edit it from your profile, nobody is told when they're added or removed, and the list and its size never appear on your profile. Memos you post to close friends also stay off your profile.
@@ -38,6 +39,8 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 **Pull to refresh**: drag down from the top of Home, Discover, Search, your profile, someone's profile or a list, and let go to reload it.
 
 **Search**: find people, follow or unfollow them, and search memo captions. While there are 50 or fewer people on TwoCents, Search lists everyone; after that it waits for you to type a name or @handle.
+
+**Tags**: tags show as pills on each memo. Tap one to open that person's profile filtered to that tag. Profiles show a row of the person's tags (with how many memos use each) to filter their memos by; Search matches tags too.
 
 **Profile**: a photo, a bio (up to 120 characters) and an optional link, all set from **Edit profile**; your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
 
@@ -133,7 +136,7 @@ With automatic updates set up, rules changes are published on every push. Withou
 ```sh
 npm run emulators                 # local Auth, Firestore and Storage
 # open http://127.0.0.1:5000/?emulators
-npm run test:rules                # 78 checks of who can read and write what
+npm run test:rules                # 82 checks of who can read and write what
 ```
 
 ### Known limits (fine to launch with, worth improving later)

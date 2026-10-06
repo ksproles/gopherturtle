@@ -85,6 +85,7 @@
       <div class="user-actions" id="user-actions"></div>
       <p class="lock-note" id="user-note" hidden></p>
       <h2 class="section-title">Memos you can hear</h2>
+      <div class="tag-filter" id="user-tags" role="group" aria-label="Filter by tag" hidden></div>
       <ol class="feed" id="user-feed"></ol>
     </section>
 
@@ -143,6 +144,7 @@
         <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
       </button>
       <h2 class="section-title">Your memos</h2>
+      <div class="tag-filter" id="my-tags" role="group" aria-label="Filter by tag" hidden></div>
       <ol class="feed" id="my-feed"></ol>
 
       <div class="account" id="account" hidden>
@@ -234,6 +236,14 @@
         <span>Caption <em>(optional)</em></span>
         <input id="caption" type="text" maxlength="120" placeholder="What's this about?">
       </label>
+      <fieldset class="tag-picker" id="tag-picker">
+        <legend>Tags <em>(optional, up to 3)</em></legend>
+        <div class="tag-options" id="tag-options"></div>
+        <div class="tag-add">
+          <input id="tag-input" type="text" maxlength="24" placeholder="Add your own tag" enterkeyhint="done" autocomplete="off" aria-label="Add your own tag">
+          <button type="button" class="ghost-btn" id="tag-add-btn">Add</button>
+        </div>
+      </fieldset>
       <button class="primary-btn" id="post-submit">Post</button>
     </div>
   </section>

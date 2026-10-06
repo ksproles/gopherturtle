@@ -50,6 +50,9 @@ const state = {
   nav: [],                // screens to go back to (profiles and lists)
   list: null,             // open followers/following list: {type, userId, handle}
   profileMemos: [],       // memos shown on someone else's profile
+  profileEmpty: '',       // what that profile says when it has no memos
+  userTag: null,          // tag filter on someone else's profile (lowercase), null = all
+  myTag: null,            // tag filter on your own profile
   signals: null,          // Discover ranking data from the backend
   rate: SPEEDS.includes(prefs.get('rate', 1)) ? prefs.get('rate', 1) : 1,
 };
@@ -107,6 +110,43 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l
 const ICON_MORE = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>';
 
+// ---------- Tags ----------
+// People tag memos so listeners know what they're about, and profiles can be filtered by tag.
+const TAG_SUGGESTIONS = ['Funny story', 'Life update', 'Good news', 'Story time', 'Hot take', 'Rant', 'Advice', 'Question', 'Music', 'Random thoughts'];
+const MAX_TAGS = 3;
+const TAG_MAX_LEN = 24;
+function cleanTag(raw) {
+  return raw.replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, TAG_MAX_LEN).trim();
+}
+const tagKey = t => t.toLowerCase();
+function tagsHTML(m) {
+  if (!m.tags || !m.tags.length) return '';
+  return `<div class="memo-tags">${m.tags.map(t =>
+    `<button class="tag-pill" data-act="tag" data-tag="${esc(t)}" aria-label="More ${esc(filterText(t))} memos from ${esc(m.author.name)}">${esc(filterText(t))}</button>`).join('')}</div>`;
+}
+// Each tag used in these memos, most used first: [[key, {label, n}], …]
+function tagCounts(memos) {
+  const map = new Map();
+  memos.forEach(m => (m.tags || []).forEach(t => {
+    const e = map.get(tagKey(t)) || { label: t, n: 0 };
+    e.n++;
+    map.set(tagKey(t), e);
+  }));
+  return [...map.entries()].sort((a, b) => b[1].n - a[1].n || a[1].label.localeCompare(b[1].label));
+}
+const withTag = (memos, key) => key ? memos.filter(m => (m.tags || []).some(t => tagKey(t) === key)) : memos;
+// The row of tag chips over a profile's memos. Returns the tag still in effect.
+function renderTagFilter(el, memos, active) {
+  const tags = tagCounts(memos);
+  if (active && !tags.some(([k]) => k === active)) active = null;
+  el.hidden = !tags.length;
+  el.innerHTML = tags.length ? [
+    `<button class="tag-chip" data-tag-filter="" aria-pressed="${!active}">All</button>`,
+    ...tags.map(([k, e]) => `<button class="tag-chip" data-tag-filter="${esc(k)}" aria-pressed="${active === k}">${esc(filterText(e.label))}<span>${e.n}</span></button>`),
+  ].join('') : '';
+  return active;
+}
+
 const HEARD_TAG = ' · <span class="heard-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Listened</span>';
 function memoHTML(m, reason) {
   const u = m.author;
@@ -126,6 +166,7 @@ function memoHTML(m, reason) {
       </div>
       ${reason ? `<p class="memo-reason">${esc(reason)}</p>` : ''}
       ${m.caption ? `<p class="memo-caption">${esc(filterText(m.caption))}</p>` : ''}
+      ${tagsHTML(m)}
       <div class="player">
         <button class="play-btn" data-act="play" aria-label="Play memo from ${esc(u.name)}. Press and hold for playback speed.">${ICON_PLAY}</button>
         <div class="wave" data-act="seek" role="presentation">${bars}</div>
@@ -359,9 +400,9 @@ async function renderSearch() {
   const memos = sorted(state.memos.filter(m => {
     if (!q) return false;
     const u = m.author;
-    return (m.caption || '').toLowerCase().includes(q) || u.name.toLowerCase().includes(q) || u.handle.includes(q);
+    return (m.caption || '').toLowerCase().includes(q) || (m.tags || []).some(t => tagKey(t).includes(q)) || u.name.toLowerCase().includes(q) || u.handle.includes(q);
   }));
-  renderList($('#search-results'), memos, q ? `No memos match “${esc(state.query)}”.` : 'Type to search memo captions.');
+  renderList($('#search-results'), memos, q ? `No memos match “${esc(state.query)}”.` : 'Type to search memo captions and tags.');
 }
 
 function renderProfile() {
@@ -374,7 +415,8 @@ function renderProfile() {
   const mine = sorted(state.memos.filter(m => m.userId === me.id && m.audience !== 'close'));
   $('#stat-memos').textContent = mine.length;
   $('#cf-count').textContent = `${state.closeCount} ${state.closeCount === 1 ? 'person' : 'people'}`;
-  renderList($('#my-feed'), mine, 'Memos you post to followers or Global show up here.');
+  state.myTag = renderTagFilter($('#my-tags'), mine, state.myTag);
+  renderList($('#my-feed'), withTag(mine, state.myTag), 'Memos you post to followers or Global show up here.');
   backend.getBlocked().then(list => {
     $('#blocked-count').textContent = list.length ? String(list.length) : '';
   }).catch(() => {});
@@ -598,6 +640,9 @@ function resetRecorder() {
   $('#rec-play').textContent = 'Play';
   $('#post-form').hidden = true;
   $('#caption').value = '';
+  postTags.length = 0;
+  $('#tag-input').value = '';
+  renderTagOptions();
   recNote.hidden = true;
   drawLevels([]);
   syncAudienceColor();
@@ -745,6 +790,53 @@ function syncAudienceColor() {
   btn.textContent = 'Post to ' + AUDIENCES[aud].label.toLowerCase();
 }
 
+// ---------- Tag picker ----------
+const postTags = [];
+// Tags you've used before, newest first.
+function myUsedTags() {
+  return backend && backend.me
+    ? sorted(state.memos.filter(m => m.userId === backend.me.id)).flatMap(m => m.tags || []) : [];
+}
+function renderTagOptions() {
+  // Your chosen tags, then tags you've used before, then suggestions.
+  const seen = new Set();
+  const options = [...postTags, ...myUsedTags(), ...TAG_SUGGESTIONS].filter(t => {
+    if (seen.has(tagKey(t))) return false;
+    seen.add(tagKey(t));
+    return true;
+  }).slice(0, Math.max(12, postTags.length));
+  const full = postTags.length >= MAX_TAGS;
+  $('#tag-options').innerHTML = options.map(t => {
+    const on = postTags.some(p => tagKey(p) === tagKey(t));
+    return `<button type="button" class="tag-chip" data-pick="${esc(t)}" aria-pressed="${on}" ${full && !on ? 'disabled' : ''}>${esc(t)}</button>`;
+  }).join('');
+  $('#tag-input').disabled = full;
+  $('#tag-add-btn').disabled = full;
+  $('#tag-input').placeholder = full ? 'Up to 3 tags' : 'Add your own tag';
+}
+function addTag(raw) {
+  let t = cleanTag(raw);
+  // Reuse the spelling of a tag you already have, so "funny story" joins "Funny story".
+  t = [...myUsedTags(), ...TAG_SUGGESTIONS].find(k => tagKey(k) === tagKey(t)) || t;
+  if (!t || postTags.length >= MAX_TAGS || postTags.some(p => tagKey(p) === tagKey(t))) return;
+  postTags.push(t);
+  renderTagOptions();
+}
+$('#tag-options').addEventListener('click', e => {
+  const b = e.target.closest('[data-pick]');
+  if (!b) return;
+  const i = postTags.findIndex(p => tagKey(p) === tagKey(b.dataset.pick));
+  if (i >= 0) { postTags.splice(i, 1); renderTagOptions(); } else addTag(b.dataset.pick);
+});
+function addTypedTag() {
+  addTag($('#tag-input').value);
+  $('#tag-input').value = '';
+}
+$('#tag-add-btn').addEventListener('click', addTypedTag);
+$('#tag-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTypedTag(); }
+});
+
 async function submitPost() {
   if (!backend || !backend.me) { toast('Still loading your account. Try again in a moment.'); return; }
   if (!rec.blob || !rec.blob.size) {
@@ -752,6 +844,7 @@ async function submitPost() {
     recNote.hidden = false;
     return;
   }
+  addTypedTag(); // a tag typed but not added yet still counts
   const btn = $('#post-submit');
   btn.disabled = true;
   btn.textContent = 'Posting…';
@@ -762,6 +855,7 @@ async function submitPost() {
       duration: rec.duration,
       audience: selectedAudience(),
       caption: $('#caption').value.trim(),
+      tags: [...postTags],
       peaks: downsample(rec.levels, BARS),
     });
   } catch (e) {
@@ -949,6 +1043,7 @@ document.querySelector('.screens').addEventListener('click', e => {
   if (act === 'amplify') toggleAmplify(m);
   if (act === 'comments') openComments(m);
   if (act === 'more') memoMenu(m);
+  if (act === 'tag') openTag(m.userId, tagKey(btn.dataset.tag));
 });
 
 const paintLike = m => cardsFor(m.id).forEach(c => {
@@ -1349,20 +1444,20 @@ $('#blocked-list').addEventListener('click', async e => {
 // ---------- Other people's profiles ----------
 // Profiles and lists stack up so Back returns to where you came from.
 function navigate(to) {
-  state.nav.push({ screen: state.screen, viewUser: state.viewUser, list: state.list });
+  state.nav.push({ screen: state.screen, viewUser: state.viewUser, list: state.list, userTag: state.userTag });
   Object.assign(state, to);
   render();
   $('#screen-' + state.screen).scrollTo({ top: 0 });
 }
 function goBack() {
-  const prev = state.nav.pop() || { screen: state.tab || 'home', viewUser: null, list: null };
+  const prev = state.nav.pop() || { screen: state.tab || 'home', viewUser: null, list: null, userTag: null };
   Object.assign(state, prev);
   render();
 }
 function openProfile(userId) {
   if (!userId) return;
   if (userId === backend.me.id) { state.screen = 'profile'; render(); return; }
-  navigate({ screen: 'user', viewUser: userId });
+  navigate({ screen: 'user', viewUser: userId, userTag: null });
 }
 function openList(type, userId, handle) {
   navigate({ screen: 'people', list: { type, userId, handle } });
@@ -1468,6 +1563,7 @@ async function renderUserProfile() {
     $('#user-actions').innerHTML = '';
     $('#user-note').hidden = true;
     $('#user-feed').innerHTML = '<li class="empty">Loading…</li>';
+    $('#user-tags').hidden = true;
     ['memos', 'followers', 'following'].forEach(k => { $('#user-stat-' + k).textContent = '–'; });
   }
   let prof;
@@ -1502,8 +1598,42 @@ async function renderUserProfile() {
     : `You can hear @${u.handle}’s public memos. Follow to ask for their followers-only memos; they’ll need to approve.`;
   $('#user-note').textContent = note;
   $('#user-note').hidden = !note;
-  renderList($('#user-feed'), sorted(prof.memos),
-    u.blocked ? 'Unblock to see their memos.' : `No memos you can hear from @${esc(u.handle)} yet.`);
+  state.profileEmpty = u.blocked ? 'Unblock to see their memos.' : `No memos you can hear from @${esc(u.handle)} yet.`;
+  paintUserFeed();
+}
+function paintUserFeed() {
+  const memos = sorted(state.profileMemos);
+  state.userTag = renderTagFilter($('#user-tags'), memos, state.userTag);
+  renderList($('#user-feed'), withTag(memos, state.userTag), state.profileEmpty);
+}
+$('#user-tags').addEventListener('click', e => {
+  const b = e.target.closest('[data-tag-filter]');
+  if (!b) return;
+  state.userTag = b.dataset.tagFilter || null;
+  paintUserFeed();
+});
+$('#my-tags').addEventListener('click', e => {
+  const b = e.target.closest('[data-tag-filter]');
+  if (!b) return;
+  state.myTag = b.dataset.tagFilter || null;
+  renderProfile();
+});
+// Tapping a tag on a memo shows that person's memos with the same tag.
+function openTag(userId, key) {
+  if (userId === backend.me.id) {
+    state.myTag = key;
+    state.screen = 'profile';
+    render();
+    $('#my-tags').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+  if (state.screen === 'user' && state.viewUser === userId) {
+    state.userTag = key;
+    paintUserFeed();
+    $('#user-tags').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+  navigate({ screen: 'user', viewUser: userId, userTag: key });
 }
 $('#user-actions').addEventListener('click', async e => {
   if (e.target.closest('[data-follow], [data-unblock]')) { onPeopleClick(e); return; }

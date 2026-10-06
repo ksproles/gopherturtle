@@ -66,14 +66,14 @@ export function createDemoBackend() {
 
   const now = Date.now();
   const seed = [
-    { user: 'u1', aud: 'close', ago: 4 * MIN, dur: 23, caption: 'ok you will NOT believe what happened at the farmers market', likes: 6 },
-    { user: 'u6', aud: 'global', ago: 18 * MIN, dur: 48, caption: 'Dawn chorus from the marsh — three warblers and something we can’t ID. Help?', likes: 312 },
-    { user: 'u3', aud: 'followers', ago: 41 * MIN, dur: 31, caption: 'Hot take: the second album is better', likes: 27 },
+    { user: 'u1', aud: 'close', ago: 4 * MIN, dur: 23, caption: 'ok you will NOT believe what happened at the farmers market', likes: 6, tags: ['Funny story'] },
+    { user: 'u6', aud: 'global', ago: 18 * MIN, dur: 48, caption: 'Dawn chorus from the marsh — three warblers and something we can’t ID. Help?', likes: 312, tags: ['Nature', 'Question'] },
+    { user: 'u3', aud: 'followers', ago: 41 * MIN, dur: 31, caption: 'Hot take: the second album is better', likes: 27, tags: ['Hot take', 'Music'] },
     { user: 'u2', aud: 'close', ago: 1.6 * 60 * MIN, dur: 12, caption: 'running 10 late, save me a seat', likes: 2 },
-    { user: 'u7', aud: 'global', ago: 3 * 60 * MIN, dur: 56, caption: 'Day 40 of learning cello. Be gentle.', likes: 1204 },
-    { user: 'u4', aud: 'followers', ago: 5 * 60 * MIN, dur: 19, caption: 'Quick update on the garden box build', likes: 14 },
+    { user: 'u7', aud: 'global', ago: 3 * 60 * MIN, dur: 56, caption: 'Day 40 of learning cello. Be gentle.', likes: 1204, tags: ['Music', 'Life update'] },
+    { user: 'u4', aud: 'followers', ago: 5 * 60 * MIN, dur: 19, caption: 'Quick update on the garden box build', likes: 14, tags: ['Life update'] },
     { user: 'u5', aud: 'followers', ago: 9 * 60 * MIN, dur: 38, caption: 'Reading the first page of the book club pick out loud', likes: 33 },
-    { user: 'u8', aud: 'global', ago: 22 * 60 * MIN, dur: 27, caption: 'Street musician in Lisbon, had to share', likes: 589 },
+    { user: 'u8', aud: 'global', ago: 22 * 60 * MIN, dur: 27, caption: 'Street musician in Lisbon, had to share', likes: 589, tags: ['Music', 'Travel'] },
     { user: 'u1', aud: 'close', ago: 26 * 60 * MIN, dur: 9, caption: 'goodnight turtles 🐢', likes: 8 },
   ].map((m, i) => ({
     amplifies: [3, 41, 2, 0, 96, 1, 4, 57, 0][i],
@@ -86,6 +86,7 @@ export function createDemoBackend() {
     createdAt: now - m.ago,
     duration: m.dur,
     caption: m.caption,
+    tags: m.tags || [],
     likes: m.likes,
     liked: false,
     seed: i + 1,
@@ -144,10 +145,10 @@ export function createDemoBackend() {
       return URL.createObjectURL(blob);
     },
 
-    async postMemo({ blob, duration, audience, caption, peaks }) {
+    async postMemo({ blob, duration, audience, caption, peaks, tags = [] }) {
       const memo = {
         id: 'me-' + Date.now(), userId: me.id, audience, createdAt: Date.now(),
-        duration, caption, likes: 0, liked: false, peaks, blob,
+        duration, caption, tags, likes: 0, liked: false, peaks, blob,
         amplifies: 0, amplified: false, amplifiedBy: [], amplifiedAt: 0,
       };
       memos.push(memo);

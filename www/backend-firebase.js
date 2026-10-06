@@ -166,6 +166,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       createdAt: toMs(d.createdAt),
       duration: d.duration,
       caption: d.caption || '',
+      tags: Array.isArray(d.tags) ? d.tags : [],
       peaks: d.peaks || [],
       likes: d.likeCount || 0,
       liked: !!(likeSnap && likeSnap.exists()),
@@ -322,7 +323,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       return getDownloadURL(ref(storage, m.audioPath));
     },
 
-    async postMemo({ blob, duration, audience, caption, peaks }) {
+    async postMemo({ blob, duration, audience, caption, peaks, tags = [] }) {
       const id = uid();
       const memoRef = doc(collection(db, 'memos'));
       const audioPath = `audio/${id}/${memoRef.id}`;
@@ -330,6 +331,7 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       await setDoc(memoRef, {
         authorId: id, audience, createdAt: serverTimestamp(),
         duration: Math.round(duration * 10) / 10, caption, peaks, audioPath, likeCount: 0,
+        tags: tags.slice(0, 3).map(t => String(t).slice(0, 24)).filter(Boolean),
       });
       await fanOut(memoRef.id, audience);
       return toMemo(await getDoc(memoRef));

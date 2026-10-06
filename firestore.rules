@@ -8,6 +8,14 @@ service cloud.firestore {
     function me() { return request.auth.uid; }
     function validHandle(h) { return h is string && h.matches('^[a-z0-9_]{3,20}$'); }
     function validName(n) { return n is string && n.size() > 0 && n.size() <= 40; }
+    // Up to 3 tags on a memo, each 1–24 characters. Optional, so older app versions still work.
+    function validTag(t) { return t is string && t.size() > 0 && t.size() <= 24; }
+    function validTags(d) {
+      return !('tags' in d) || (d.tags is list && d.tags.size() <= 3
+        && (d.tags.size() < 1 || validTag(d.tags[0]))
+        && (d.tags.size() < 2 || validTag(d.tags[1]))
+        && (d.tags.size() < 3 || validTag(d.tags[2])));
+    }
     function validBio(b) { return b is string && b.size() <= 120; }
     function validLink(l) { return l == '' || (l is string && l.size() <= 200 && l.matches('^https?://[^ ]+$')); }
     function validPhoto(p) {
@@ -110,7 +118,8 @@ service cloud.firestore {
 
       allow read: if signedIn() && canRead();
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['authorId', 'audience', 'createdAt', 'duration', 'caption', 'peaks', 'audioPath', 'likeCount'])
+        && request.resource.data.keys().hasOnly(['authorId', 'audience', 'createdAt', 'duration', 'caption', 'peaks', 'audioPath', 'likeCount', 'tags'])
+        && validTags(request.resource.data)
         && request.resource.data.authorId == me()
         && request.resource.data.audience in ['close', 'followers', 'global']
         && request.resource.data.createdAt == request.time
