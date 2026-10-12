@@ -58,7 +58,7 @@ Welcome to TwoCents! Record voice memos, choose who hears them, and listen to yo
 
 ## App Review Information
 
-- **Sign-in required:** Yes. Create a demo account in the app first (for example `appreview@snacktimemedia.net`) and enter its email and password here.
+- **Sign-in required:** Yes. Create a demo account in the app first (for example `appreview@snacktimemedia.net`) and enter its email and password here. Use a real inbox you can open: new accounts confirm their email before posting.
 - **Before submitting,** set up the demo account so the reviewer sees a working app:
   - Post 2–3 memos (one Global, one Followers only).
   - Have a second account follow the demo account (approve the request), and have it post a memo.

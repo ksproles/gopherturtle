@@ -6,7 +6,7 @@
 import { BARS, rng, seededPeaks, synthMemo } from './audio-utils.js';
 import { createDemoBackend } from './backend-demo.js';
 import { filterText } from './text-filter.js';
-import { firebaseConfig } from './firebase-config.js';
+import { firebaseConfig, appCheckConfig } from './firebase-config.js';
 
 // ---------- Constants ----------
 const AUDIENCES = {
@@ -429,6 +429,57 @@ function renderProfile() {
   }).catch(() => {});
 }
 
+// ---------- Email verification ----------
+// New accounts confirm their email before posting, commenting or following people.
+const needsVerify = () => !!backend && backend.mode === 'firebase' && backend.signedIn && !backend.emailVerified;
+function paintVerifyBanners() {
+  const show = needsVerify();
+  document.querySelectorAll('.verify-banner').forEach(el => {
+    el.hidden = !show;
+    if (!show) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <p><strong>Verify your email</strong> to post, comment and follow people. We sent a link to ${esc(backend.email)}. Check your spam folder too.</p>
+      <div class="verify-actions">
+        <button class="primary-btn" data-verify="check">I’ve verified</button>
+        <button class="ghost-btn" data-verify="resend">Resend email</button>
+      </div>`;
+  });
+}
+async function checkVerifiedNow() {
+  try {
+    if (await backend.checkVerified()) {
+      toast('Email verified. You’re all set!');
+      render();
+      return true;
+    }
+    toast('Not verified yet. Tap the link in the email, then try again.');
+  } catch (e) { toast(friendlyError(e)); }
+  return false;
+}
+async function resendVerification() {
+  try {
+    await backend.sendVerification();
+    toast('Sent! Check ' + backend.email);
+  } catch (e) { toast(friendlyError(e)); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-verify]');
+  if (!b) return;
+  if (b.dataset.verify === 'check') checkVerifiedNow();
+  else resendVerification();
+});
+// Returns true if the action can go ahead; otherwise asks them to verify first.
+async function requireVerified(what) {
+  if (!needsVerify()) return true;
+  const key = await chooseAction(`Verify your email to ${what}. We sent a link to ${backend.email}.`, [
+    { key: 'check', label: 'I’ve verified' },
+    { key: 'resend', label: 'Resend email' },
+  ]);
+  if (key === 'check') return checkVerifiedNow();
+  if (key === 'resend') resendVerification();
+  return false;
+}
+
 const TAB_SCREENS = ['home', 'discover', 'search', 'profile'];
 function render() {
   app.dataset.screen = state.screen;
@@ -437,6 +488,7 @@ function render() {
   const activeTab = state.tab;
   document.querySelectorAll('.tab[data-screen]').forEach(t =>
     t.classList.toggle('is-active', t.dataset.screen === activeTab));
+  paintVerifyBanners();
   if (state.screen === 'home') renderHome();
   if (state.screen === 'discover') renderDiscover();
   if (state.screen === 'search') renderSearch();
@@ -614,8 +666,9 @@ const canvas = $('#rec-wave');
 const cctx = canvas.getContext('2d');
 const preview = new Audio();
 
-function openSheet() {
+async function openSheet() {
   if (!backend || !backend.me) { toast('Still loading your account. Try again in a moment.'); return; }
+  if (!(await requireVerified('post'))) return;
   stopPlayback();
   resetRecorder();
   sheet.hidden = false;
@@ -1139,6 +1192,7 @@ async function followButtonClicked(btn) {
   btn.disabled = true;
   try {
     if (current === 'none') {
+      if (!(await requireVerified('follow people'))) { btn.disabled = false; return; }
       const result = await backend.follow(id);
       if (result === 'following') state.following.add(id); else state.requested.add(id);
       paintFollowButtons(id, result === 'following' ? 'following' : 'requested');
@@ -1359,6 +1413,7 @@ $('#comment-form').addEventListener('submit', async e => {
   const text = commentInput.value.trim();
   const m = openMemo;
   if (!text || !m) return;
+  if (!(await requireVerified('comment'))) return;
   $('#comment-send').disabled = true;
   try {
     const c = await backend.addComment(m, text);
@@ -2054,7 +2109,7 @@ async function boot() {
     try {
       const mod = await import('./backend-firebase.js');
       friendlyError = mod.friendlyError;
-      backend = mod.createFirebaseBackend(config, { emulators });
+      backend = mod.createFirebaseBackend(config, { emulators, appCheck: appCheckConfig });
     } catch (e) {
       // With real accounts configured, never fall back to demo mode: say what happened instead.
       console.error('TwoCents could not connect', e);

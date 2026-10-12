@@ -13,6 +13,7 @@
     "test:rules": "firebase emulators:exec --project demo-gopherturtle --only auth,firestore,storage \"node test/rules.test.mjs\""
   },
   "dependencies": {
+    "@capacitor-firebase/app-check": "^8.5.2",
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/ios": "^8.0.0",

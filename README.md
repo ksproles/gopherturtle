@@ -44,6 +44,10 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Profile**: a photo, a bio (up to 120 characters) and an optional link, all set from **Edit profile**; your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
 
+**Email verification**: new accounts confirm their email (a link is sent at sign-up) before posting, commenting or following people. Until then, Home and Profile show a banner with **I've verified** and **Resend email**. The rules enforce it; accounts created before Oct 13, 2026 are exempt.
+
+**App Check**: blocks requests that don't come from the real app (App Attest on iPhone, reCAPTCHA v3 on the website). It's off until set up; see [LAUNCH.md](LAUNCH.md#app-check-blocks-scripts-that-arent-your-app).
+
 **Accounts (optional)**: with Firebase turned on, people sign up with email, a name and a unique @handle, and memos are shared for real. Without it, the app runs in demo mode with example people. See [Turning on accounts](#turning-on-accounts-firebase).
 
 ## Project layout
@@ -136,7 +140,7 @@ With automatic updates set up, rules changes are published on every push. Withou
 ```sh
 npm run emulators                 # local Auth, Firestore and Storage
 # open http://127.0.0.1:5000/?emulators
-npm run test:rules                # 82 checks of who can read and write what
+npm run test:rules                # 85 checks of who can read and write what
 ```
 
 ### Known limits (fine to launch with, worth improving later)

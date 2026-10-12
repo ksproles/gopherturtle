@@ -16,10 +16,10 @@
 //   amplifies/{uid_memoId}           {uid, memoId, authorId, createdAt}  reposts of public memos
 //   Storage: audio/{uid}/{memoId}, avatars/{uid}/avatar.jpg
 import {
-  initializeApp,
+  initializeApp, initializeAppCheck, ReCaptchaV3Provider, CustomProvider,
   initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, connectAuthEmulator,
   onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
+  signOut, sendPasswordResetEmail, sendEmailVerification, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
   initializeFirestore, connectFirestoreEmulator,
   collection, collectionGroup, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy, limit,
   addDoc, writeBatch, runTransaction, serverTimestamp, increment, getCountFromServer,
@@ -28,6 +28,8 @@ import {
 import { colorFor } from './audio-utils.js';
 
 const FEED_LIMIT = 100;
+// Accounts created from this date on confirm their email before posting.
+const VERIFY_REQUIRED_FROM = Date.UTC(2026, 9, 13);
 const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
 // Search lists everyone while the community is small; above this, it's search-only.
 const LIST_ALL_UNDER = 50;
@@ -64,8 +66,38 @@ export function friendlyError(e) {
   return e && e.code ? `Something went wrong (${e.code}). Try again.` : 'Something went wrong. Try again.';
 }
 
-export function createFirebaseBackend(config, { emulators = false } = {}) {
+// App Check: the iPhone app gets tokens from Apple's App Attest (through the
+// @capacitor-firebase/app-check plugin); the website uses reCAPTCHA v3.
+// Each half stays off until it's configured in firebase-config.js.
+function startAppCheck(app, opts) {
+  if (!opts) return;
+  const cap = window.Capacitor;
+  try {
+    if (cap && cap.isNativePlatform && cap.isNativePlatform()) {
+      if (!opts.ios || cap.getPlatform() !== 'ios') return;
+      const plugin = cap.registerPlugin('FirebaseAppCheck');
+      const ready = plugin.initialize({ isTokenAutoRefreshEnabled: true });
+      initializeAppCheck(app, {
+        provider: new CustomProvider({
+          getToken: async () => {
+            await ready;
+            const r = await plugin.getToken({ forceRefresh: false });
+            return { token: r.token, expireTimeMillis: r.expireTimeMillis };
+          },
+        }),
+        isTokenAutoRefreshEnabled: true,
+      });
+    } else if (opts.webSiteKey) {
+      initializeAppCheck(app, { provider: new ReCaptchaV3Provider(opts.webSiteKey), isTokenAutoRefreshEnabled: true });
+    }
+  } catch (e) {
+    console.warn('App Check could not start', e);
+  }
+}
+
+export function createFirebaseBackend(config, { emulators = false, appCheck = null } = {}) {
   const app = initializeApp(config);
+  if (!emulators) startAppCheck(app, appCheck);
   // initializeAuth (not getAuth) so sign-in works inside the iOS/Android app shell.
   const auth = initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] });
   const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
@@ -216,6 +248,22 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
     get me() { return me; },
     get email() { return auth.currentUser ? auth.currentUser.email : ''; },
     get signedIn() { return !!auth.currentUser; },
+    // Accounts made before email verification started don't need it (matches firestore.rules).
+    get emailVerified() {
+      return !!(auth.currentUser && (auth.currentUser.emailVerified
+        || (me && me.createdAt && toMs(me.createdAt) < VERIFY_REQUIRED_FROM)));
+    },
+
+    // Email verification: posting, commenting and follow requests need it (see firestore.rules).
+    sendVerification() { return sendEmailVerification(auth.currentUser); },
+    // After tapping the link in the email: refresh the account so the rules see it.
+    async checkVerified() {
+      const u = auth.currentUser;
+      if (!u) return false;
+      await u.reload();
+      if (u.emailVerified) await u.getIdToken(true);
+      return u.emailVerified;
+    },
 
     // Calls onUser(profile) when signed in with a profile, onUser(null) when signed out,
     // and onUser({needsProfile: true}) when signed in but no handle has been chosen yet.
@@ -225,6 +273,8 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
         // Sign-up finishes creating the profile itself and then opens the app.
         if (signingUp) return;
         try {
+          // Picks up a verification done in the email since last time.
+          if (!user.emailVerified) await api.checkVerified().catch(() => {});
           const profile = await loadSelf();
           onUser(profile || { needsProfile: true, email: user.email });
         } catch (e) {
@@ -246,7 +296,9 @@ export function createFirebaseBackend(config, { emulators = false } = {}) {
       signingUp = true;
       try {
         await createUserWithEmailAndPassword(auth, email.trim(), password);
-        return await api.createProfile({ name, handle });
+        const profile = await api.createProfile({ name, handle });
+        sendEmailVerification(auth.currentUser).catch(e => console.warn('Couldn’t send the verification email', e));
+        return profile;
       } finally {
         signingUp = false;
       }

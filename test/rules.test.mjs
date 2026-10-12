@@ -16,7 +16,9 @@ const env = await initializeTestEnvironment({
   storage: { rules: readFileSync('storage.rules', 'utf8'), host: '127.0.0.1', port: 9199 },
 });
 
-const as = uid => env.authenticatedContext(uid);
+// Test people have confirmed their email, except where a test says otherwise.
+const as = uid => env.authenticatedContext(uid, { email_verified: true });
+const unverified = uid => env.authenticatedContext(uid, { email_verified: false });
 const db = uid => as(uid).firestore();
 const st = uid => as(uid).storage();
 const anon = env.unauthenticatedContext().firestore();
@@ -408,6 +410,31 @@ await test('once removed, alice can no longer hear bob’s followers-only memos 
 });
 await test('the author can delete a memo', async () => {
   await assertSucceeds(deleteDoc(doc(db('bob'), 'memos', 'm-followers')));
+});
+
+console.log('Email verification');
+await test('without a confirmed email you can’t post, upload audio, comment or ask to follow', async () => {
+  // Vera signed up after verification started.
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'users', 'vera'),
+    { name: 'Vera', nameLower: 'vera', handle: 'vera', color: '#2f6b4f', createdAt: new Date(Date.UTC(2026, 9, 20)) }));
+  const d = unverified('vera').firestore();
+  await assertFails(setDoc(doc(d, 'memos', 'dv1'), memoData('vera', 'dv1', 'global')));
+  await assertFails(uploadBytes(ref(unverified('vera').storage(), 'audio/vera/dv1'), audio, { contentType: 'audio/mp4' }));
+  await assertFails(setDoc(doc(d, 'memos', 'm-global', 'comments', 'dvc'), { authorId: 'vera', text: 'hi', createdAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(d, 'followRequests', 'vera_bob'), { requester: 'vera', target: 'bob', createdAt: serverTimestamp() }));
+  // Once confirmed, the same memo goes through.
+  await assertSucceeds(setDoc(doc(db('vera'), 'memos', 'dv1'), memoData('vera', 'dv1', 'global')));
+});
+await test('without a confirmed email you can still listen and report', async () => {
+  const d = unverified('vera').firestore();
+  await assertSucceeds(getDoc(doc(d, 'memos', 'm-global')));
+  await assertSucceeds(addDoc(collection(d, 'reports'), { reporterId: 'vera', type: 'memo', targetId: 'm-global', targetAuthorId: 'bob', memoId: 'm-global', reason: 'spam', text: '', createdAt: serverTimestamp(), status: 'open' }));
+});
+await test('accounts made before verification started can still post without it', async () => {
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'users', 'olga'),
+    { name: 'Olga', nameLower: 'olga', handle: 'olga', color: '#2f6b4f', createdAt: new Date(Date.UTC(2026, 9, 1)) }));
+  await assertSucceeds(setDoc(doc(unverified('olga').firestore(), 'memos', 'ol1'), memoData('olga', 'ol1', 'global')));
+  await assertSucceeds(uploadBytes(ref(unverified('olga').storage(), 'audio/olga/ol1'), audio, { contentType: 'audio/mp4' }));
 });
 
 console.log('Memo tags');

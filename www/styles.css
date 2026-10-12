@@ -904,3 +904,17 @@ button { cursor: pointer; }
   background: var(--bg);
   font-weight: 500;
 }
+
+/* ---------- Email verification ---------- */
+.verify-banner {
+  margin: 0 0 14px; padding: 14px;
+  border: 1.5px solid var(--rec);
+  border-radius: 16px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.verify-banner p { margin: 0 0 12px; color: var(--ink-2); }
+.verify-banner strong { color: var(--ink); }
+.verify-actions { display: flex; gap: 8px; }
+.verify-actions .primary-btn { flex: 1; padding: 11px; font-size: 15px; background: var(--ink); }
+.verify-actions .ghost-btn { flex: none; }

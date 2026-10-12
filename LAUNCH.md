@@ -98,6 +98,31 @@ For both stores:
 - [ ] **Billing safety.** Set a budget alert in Google Cloud Billing (for example $10, $50 and $100).
 - [ ] **Firebase App Check (recommended).** Makes sure only your real app can use your Firebase project, which blocks scripted abuse.
 
+## App Check (blocks scripts that aren't your app)
+
+The code is in place but switched off (`appCheckConfig` in `www/firebase-config.js`). Turn it on in three parts, then enforce it.
+
+**iPhone app (App Attest)**
+1. Firebase console → ⚙️ **Project settings** → **General** → **Add app** → **iOS**. Bundle ID: `snacktimemedia.twocents`. Nickname: `TwoCents iOS`. Click **Register app**, then **Download GoogleService-Info.plist**. Skip the rest of the steps there (the SDK is already added).
+2. In Xcode, drag `GoogleService-Info.plist` into the **App** folder (next to `Info.plist`). Tick **Copy items if needed** and the **App** target.
+3. Xcode → **App** target → **Signing & Capabilities** → **+ Capability** → **App Attest**.
+4. Firebase console → **App Check** → **Apps** → **TwoCents iOS** → **App Attest** → enter your **Team ID** (developer.apple.com → Account → Membership details) → **Save**.
+5. Tell Claude "iOS App Check is set up". Claude flips `ios: true`, and you build a new version.
+
+App Attest doesn't work in the Simulator; that's expected. Test on your iPhone or with TestFlight.
+
+**Website (reCAPTCHA v3)**
+1. Go to google.com/recaptcha/admin/create. Type: **Score based (v3)**. Domains: `gopher-turtle.web.app`, `gopher-turtle.firebaseapp.com`, `localhost`. Submit, and copy the **site key** and the **secret key**.
+2. Firebase console → **App Check** → **Apps** → the web app → **reCAPTCHA** → paste the **secret key** → **Save**.
+3. Send Claude the **site key** (it's public). Claude puts it in `webSiteKey`.
+
+**Enforce**
+Watch Firebase console → **App Check** → **APIs** for a few days. When nearly all requests show as *verified*, click **Enforce** for **Cloud Firestore**, **Cloud Storage** and **Authentication**. From then on, requests that don't come from your app or website are rejected. Older app versions without App Check stop working once you enforce, so do it after everyone has updated (easy before launch).
+
+## Email verification
+
+New accounts get a confirmation email when they sign up and must tap the link before they can post, comment or follow people (listening, liking and reporting work right away). Accounts created before Oct 13, 2026 don't need it. Customize the email under Firebase console → **Authentication** → **Templates** → **Email address verification** (set the public-facing name to TwoCents first; see section 1).
+
 ## 7. Before you have lots of users (nice to have)
 
 - Push notifications for follow requests, comments and reposts. This brings people back, and needs a small amount of native setup.

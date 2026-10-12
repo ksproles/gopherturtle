@@ -5,6 +5,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    // Posting, commenting and follow requests need a confirmed email address.
+    // Accounts made before this started (Oct 13, 2026) don't need it, so older
+    // app versions keep working for them.
+    function verified() {
+      return request.auth.token.email_verified == true
+        || get(/databases/$(database)/documents/users/$(me())).data.createdAt < timestamp.date(2026, 10, 13);
+    }
     function me() { return request.auth.uid; }
     function validHandle(h) { return h is string && h.matches('^[a-z0-9_]{3,20}$'); }
     function validName(n) { return n is string && n.size() > 0 && n.size() <= 40; }
@@ -83,7 +90,7 @@ service cloud.firestore {
     // being followed approves (turning it into a follow) or declines.
     match /followRequests/{id} {
       allow read: if signedIn() && (resource.data.requester == me() || resource.data.target == me());
-      allow create: if signedIn()
+      allow create: if signedIn() && verified()
         && request.resource.data.keys().hasOnly(['requester', 'target', 'createdAt'])
         && request.resource.data.requester == me()
         && request.resource.data.target != me()
@@ -117,7 +124,7 @@ service cloud.firestore {
       function ampCount(data) { return data.get('amplifyCount', 0); }
 
       allow read: if signedIn() && canRead();
-      allow create: if signedIn()
+      allow create: if signedIn() && verified()
         && request.resource.data.keys().hasOnly(['authorId', 'audience', 'createdAt', 'duration', 'caption', 'peaks', 'audioPath', 'likeCount', 'tags'])
         && validTags(request.resource.data)
         && request.resource.data.authorId == me()
@@ -150,7 +157,7 @@ service cloud.firestore {
         function memo() { return get(/databases/$(database)/documents/memos/$(memoId)).data; }
         function canReadMemo() { return canHear(memo()); }
         allow read: if signedIn() && canReadMemo();
-        allow create: if signedIn() && canReadMemo()
+        allow create: if signedIn() && verified() && canReadMemo()
           && !blockedBy(memo().authorId)
           && request.resource.data.keys().hasOnly(['authorId', 'text', 'createdAt'])
           && request.resource.data.authorId == me()

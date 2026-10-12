@@ -1,10 +1,11 @@
 // Entry point for the bundled Firebase SDK (www/vendor/firebase.js).
 // Rebuild with `npm run build:firebase` after changing what's exported here.
 export { initializeApp } from 'firebase/app';
+export { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from 'firebase/app-check';
 export {
   initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, connectAuthEmulator,
   onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
+  signOut, sendPasswordResetEmail, sendEmailVerification, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
 } from 'firebase/auth';
 export {
   initializeFirestore, connectFirestoreEmulator,

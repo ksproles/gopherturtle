@@ -25,7 +25,10 @@ service firebase.storage {
     }
 
     match /audio/{uid}/{memoId} {
+      // Posting needs a confirmed email address (same as firestore.rules).
       allow create, update: if request.auth != null && request.auth.uid == uid
+        && (request.auth.token.email_verified == true
+          || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.createdAt < timestamp.date(2026, 10, 13))
         && request.resource.size < 25 * 1024 * 1024
         && request.resource.contentType.matches('audio/.*');
       allow delete: if request.auth != null && request.auth.uid == uid;
