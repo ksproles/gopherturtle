@@ -69,6 +69,8 @@ Steps:
    - Access: Full Access
 
 **Upload a build**
+*Encryption (export compliance):* TwoCents only uses standard HTTPS, which is exempt. `ITSAppUsesNonExemptEncryption` is set to `NO` in `Info.plist`, so App Store Connect won't ask about encryption on each build. If it ever asks, answer: uses encryption? **Yes, only standard HTTPS/exempt** → "None of the algorithms mentioned above" (no documents needed).
+
 9. In Xcode, set the destination to **Any iOS Device (arm64)**, then **Product → Archive**.
 10. When the Organizer window opens, choose **Distribute App → App Store Connect → Upload** and accept the defaults.
 11. After 10–30 minutes the build appears in App Store Connect under **TestFlight**. Add yourself and friends as testers and install it with the **TestFlight** app.
