@@ -411,12 +411,13 @@ function renderProfile() {
   $('#profile-name').textContent = me.name;
   $('#profile-handle').textContent = '@' + me.handle;
   paintBioAndLink($('#profile-bio'), $('#profile-link'), me);
-  // Your profile is what other people see, so close friends memos stay off it.
-  const mine = sorted(state.memos.filter(m => m.userId === me.id && m.audience !== 'close'));
+  // All your memos, close friends ones included. Other people see your close
+  // friends memos on your profile only if they're on your list.
+  const mine = sorted(state.memos.filter(m => m.userId === me.id));
   $('#stat-memos').textContent = mine.length;
   $('#cf-count').textContent = `${state.closeCount} ${state.closeCount === 1 ? 'person' : 'people'}`;
   state.myTag = renderTagFilter($('#my-tags'), mine, state.myTag);
-  renderList($('#my-feed'), withTag(mine, state.myTag), 'Memos you post to followers or Global show up here.');
+  renderList($('#my-feed'), withTag(mine, state.myTag), 'Your memos show up here.');
   backend.getBlocked().then(list => {
     $('#blocked-count').textContent = list.length ? String(list.length) : '';
   }).catch(() => {});
@@ -1638,7 +1639,8 @@ async function renderUserProfile() {
   $('#user-name').textContent = u.name;
   $('#user-handle').textContent = '@' + u.handle;
   state.profileMemos = prof.memos;
-  $('#user-stat-memos').textContent = fmtCount(prof.memos.filter(m => m.audience !== 'close').length);
+  // Counts the memos you can hear, so close friends memos count only for people on the list.
+  $('#user-stat-memos').textContent = fmtCount(prof.memos.length);
   $('#user-stat-followers').textContent = fmtCount(prof.followers);
   $('#user-stat-following').textContent = fmtCount(prof.following);
   $('#user-actions').dataset.handle = u.handle;

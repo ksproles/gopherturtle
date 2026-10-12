@@ -26,7 +26,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
    Add up to 3 **tags** so people know what it's about: pick from suggestions (Funny story, Life update, Good news, Hot take…), tags you've used before, or type your own (up to 24 characters).
 5. Tap **Post**.
 
-**Close friends are private.** Your close friends list is only visible to you. You edit it from your profile, nobody is told when they're added or removed, and the list and its size never appear on your profile. Memos you post to close friends also stay off your profile.
+**Close friends are private.** Your close friends list is only visible to you. You edit it from your profile, nobody is told when they're added or removed, and the list and its size never appear on your profile. Your close friends memos show on your profile only to you and to people on your list; everyone else never sees them (or counts them).
 
 **Like, Comment, Repost**: every memo has **Like** (heart), **Comment** (text replies, up to 280 characters; delete your own, or any comment on your own memo) and, on public memos, **Repost** (shares it to your followers' Home with a "Reposted by …" line). Only public (Global) memos can be reposted, and not your own. Tap Repost again to undo. (Reposts are stored as `amplifies` in Firestore.) Delete your own memos from the ••• menu.
 
@@ -42,7 +42,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Tags**: tags show as pills on each memo. Tap one to open that person's profile filtered to that tag. Profiles show a row of the person's tags (with how many memos use each) to filter their memos by; Search matches tags too.
 
-**Profile**: a photo, a bio (up to 120 characters) and an optional link, all set from **Edit profile**; your memos (followers-only and global), stats, your private close friends list, and (with accounts on) sign out and delete account.
+**Profile**: a photo, a bio (up to 120 characters) and an optional link, all set from **Edit profile**; your memos (including close friends memos, which only you and your close friends see there), stats, your private close friends list, and (with accounts on) sign out and delete account.
 
 **Email verification**: new accounts confirm their email (a link is sent at sign-up) before posting, commenting or following people. Until then, Home and Profile show a banner with **I've verified** and **Resend email**. The rules enforce it; accounts created before Oct 13, 2026 are exempt.
 
