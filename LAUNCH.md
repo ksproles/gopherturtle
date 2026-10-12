@@ -107,7 +107,7 @@ The code is in place but switched off (`appCheckConfig` in `www/firebase-config.
 2. In Xcode, drag `GoogleService-Info.plist` into the **App** folder (next to `Info.plist`). Tick **Copy items if needed** and the **App** target.
 3. Xcode → **App** target → **Signing & Capabilities** → **+ Capability** → **App Attest**.
 4. Firebase console → **App Check** → **Apps** → **TwoCents iOS** → **App Attest** → enter your **Team ID** (developer.apple.com → Account → Membership details) → **Save**.
-5. Tell Claude "iOS App Check is set up". Claude flips `ios: true`, and you build a new version.
+5. ✅ Done (Oct 2026): `ios: true` is set. Every build from now on needs `GoogleService-Info.plist` in Xcode's App folder.
 
 App Attest doesn't work in the Simulator; that's expected. Test on your iPhone or with TestFlight.
 

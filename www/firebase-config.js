@@ -19,5 +19,5 @@ export const firebaseConfig = {
 // up in the Firebase console; see LAUNCH.md → "App Check".
 export const appCheckConfig = {
   webSiteKey: '',  // reCAPTCHA v3 site key for the website
-  ios: false,      // true once GoogleService-Info.plist and App Attest are added in Xcode
+  ios: true,       // GoogleService-Info.plist and App Attest are added in Xcode
 };
