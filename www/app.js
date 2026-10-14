@@ -2055,8 +2055,19 @@ function authError(msg) {
   $('#auth-error').textContent = msg;
   $('#auth-error').hidden = false;
 }
+// The iPhone offers to save a password when the sign-in form goes away after
+// it's submitted, so the form is taken off the page once you're in and put
+// back when the sign-in screen is needed again.
+const authFormSpot = { parent: authForm.parentNode, next: authForm.nextSibling };
+function detachAuthForm() {
+  if (authForm.isConnected) authForm.remove();
+}
+function attachAuthForm() {
+  if (!authForm.isConnected) authFormSpot.parent.insertBefore(authForm, authFormSpot.next);
+}
 function showAuth(mode) {
   stopPlayback();
+  attachAuthForm();
   setAuthMode(mode);
   auth.hidden = false;
 }
@@ -2133,6 +2144,7 @@ async function refreshFeed() {
 function onSignedIn() {
   if (!backend.me) return;
   auth.hidden = true;
+  detachAuthForm();
   state.screen = 'home';
   state.filter = null;
   state.loading = true;
