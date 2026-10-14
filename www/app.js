@@ -572,6 +572,20 @@ function tick() {
   player.raf = requestAnimationFrame(tick);
 }
 
+// If a memo hasn't started a few seconds after a tap, say so instead of
+// leaving the button doing nothing. The code in the message helps diagnose it.
+let playWatch = 0;
+function watchPlayback(m) {
+  clearTimeout(playWatch);
+  playWatch = setTimeout(() => {
+    if (player.memo !== m || audio.paused || audio.currentTime > 0) return;
+    const code = audio.error ? `e${audio.error.code}` : `n${audio.networkState}r${audio.readyState}`;
+    console.error('Playback didn’t start', code, audio.src.slice(0, 80));
+    stopPlayback();
+    toast(`Couldn’t start this memo (${code}). Check your connection and tap play again.`);
+  }, 8000);
+}
+
 async function togglePlay(m, seekFrac) {
   if (player.memo && player.memo.id === m.id) {
     if (seekFrac != null) {
@@ -589,6 +603,7 @@ async function togglePlay(m, seekFrac) {
   stopPlayback();
   player.memo = m;
   markPlaying(m.id, true);
+  watchPlayback(m);
   try {
     if (urlCache.has(m.id)) {
       audio.src = urlCache.get(m.id); // ready: start playing within the tap
@@ -1089,7 +1104,7 @@ document.querySelector('.screens').addEventListener('click', e => {
   if (!btn) return;
   const card = btn.closest('.memo');
   const m = card && findMemo(card.dataset.id);
-  if (!m) return;
+  if (!m) { if (card) toast('Couldn’t find this memo. Pull down to refresh.'); return; }
   const act = btn.dataset.act;
   if (act === 'play') {
     if (hold.fired) { hold.fired = false; return; }
