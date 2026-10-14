@@ -845,6 +845,7 @@ function selectedAudience() {
 function syncAudienceColor() {
   const btn = $('#post-submit');
   const aud = selectedAudience();
+  document.querySelectorAll('.aud-opt').forEach(o => o.classList.toggle('is-checked', o.dataset.aud === aud));
   btn.dataset.aud = aud;
   btn.textContent = 'Post to ' + AUDIENCES[aud].label.toLowerCase();
 }

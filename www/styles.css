@@ -557,7 +557,8 @@ button { cursor: pointer; }
 
 .post-form { margin-top: 18px; display: grid; gap: 16px; }
 .audience { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; }
-.audience legend { margin-bottom: 8px; font-weight: 700; }
+/* float + full width: older iPhones otherwise squeeze a legend inside a grid to one word per line */
+.audience legend { float: left; width: 100%; margin-bottom: 8px; padding: 0; font-weight: 700; }
 .aud-opt {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px;
@@ -569,6 +570,8 @@ button { cursor: pointer; }
 }
 .aud-opt input { position: absolute; opacity: 0; pointer-events: none; }
 .aud-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--aud); box-shadow: 0 0 0 3px var(--aud-soft); }
+/* .is-checked is set from JS for iPhones older than iOS 15.4, which lack :has() */
+.aud-opt.is-checked,
 .aud-opt:has(input:checked) { border-color: var(--aud); background: var(--aud-soft); color: var(--aud); }
 .aud-opt:has(input:focus-visible) { outline: 2.5px solid var(--aud); outline-offset: 2px; }
 .caption-field { display: grid; gap: 6px; font-weight: 700; }
@@ -892,7 +895,7 @@ button { cursor: pointer; }
 .tag-chip[aria-pressed="true"] span { color: inherit; opacity: .75; }
 .tag-chip:disabled { opacity: .4; }
 .tag-picker { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; min-width: 0; }
-.tag-picker legend { margin-bottom: 8px; padding: 0; font-weight: 700; }
+.tag-picker legend { float: left; width: 100%; margin-bottom: 8px; padding: 0; font-weight: 700; }
 .tag-picker legend em { color: var(--ink-2); font-style: normal; font-weight: 500; }
 .tag-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-add { display: flex; gap: 8px; }
