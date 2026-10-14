@@ -9,7 +9,9 @@
   "hosting": {
     "public": "www",
     "ignore": [
-      "**/.*"
+      "**/.DS_Store",
+      "**/.git/**",
+      "**/node_modules/**"
     ],
     "headers": [
       {
@@ -18,6 +20,15 @@
           {
             "key": "Cache-Control",
             "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
           }
         ]
       }

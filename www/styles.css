@@ -918,3 +918,5 @@ button { cursor: pointer; }
 .verify-actions { display: flex; gap: 8px; }
 .verify-actions .primary-btn { flex: 1; padding: 11px; font-size: 15px; background: var(--ink); }
 .verify-actions .ghost-btn { flex: none; }
+
+.link-btn { margin-top: 10px; padding: 4px 0; border: 0; background: none; color: var(--ink-2); font-size: 13.5px; font-weight: 600; text-decoration: underline; }

@@ -5,7 +5,7 @@ export { initializeAppCheck, ReCaptchaV3Provider, CustomProvider } from 'firebas
 export {
   initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, connectAuthEmulator,
   onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, sendEmailVerification, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
+  signOut, sendPasswordResetEmail, sendEmailVerification, verifyBeforeUpdateEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
 } from 'firebase/auth';
 export {
   initializeFirestore, connectFirestoreEmulator,

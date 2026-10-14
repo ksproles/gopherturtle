@@ -119,9 +119,15 @@ App Attest doesn't work in the Simulator; that's expected. Test on your iPhone o
 **Enforce**
 Watch Firebase console → **App Check** → **APIs** for a few days. When nearly all requests show as *verified*, click **Enforce** for **Cloud Firestore**, **Cloud Storage** and **Authentication**. From then on, requests that don't come from your app or website are rejected. Older app versions without App Check stop working once you enforce, so do it after everyone has updated (easy before launch).
 
+## Password AutoFill (iPhone suggests and saves passwords)
+
+1. `www/.well-known/apple-app-site-association` links the app to `gopher-turtle.web.app`. It needs your Apple **Team ID** in place of `TEAMID` (Claude does this when you send it).
+2. Xcode → **App** target → **Signing & Capabilities** → **+ Capability** → **Associated Domains** → **+** → `webcredentials:gopher-turtle.web.app`.
+3. Build a new version. On sign-up, iPhone suggests a strong password and saves it to Passwords (with your email as the username); on sign-in, it offers to fill it in.
+
 ## Email verification
 
-New accounts get a confirmation email when they sign up and must tap the link before they can post, comment or follow people (listening, liking and reporting work right away). Accounts created before Oct 13, 2026 don't need it. Customize the email under Firebase console → **Authentication** → **Templates** → **Email address verification** (set the public-facing name to TwoCents first; see section 1).
+New accounts get a confirmation email when they sign up and must tap the link before they can post, comment or follow people (listening, liking and reporting work right away). Accounts created before Oct 13, 2026 don't need it. Typed the wrong email? **Profile → Change email** (or **Wrong email? Change it** on the banner) sends a link to the new address; the email switches, and is verified, when it's tapped. Customize the email under Firebase console → **Authentication** → **Templates** → **Email address verification** (set the public-facing name to TwoCents first; see section 1).
 
 ## 7. Before you have lots of users (nice to have)
 

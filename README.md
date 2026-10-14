@@ -44,7 +44,7 @@ The app is built with web code (`www/`) and packaged as native iOS and Android a
 
 **Profile**: a photo, a bio (up to 120 characters) and an optional link, all set from **Edit profile**; your memos (including close friends memos, which only you and your close friends see there), stats, your private close friends list, and (with accounts on) sign out and delete account.
 
-**Email verification**: new accounts confirm their email (a link is sent at sign-up) before posting, commenting or following people. Until then, Home and Profile show a banner with **I've verified** and **Resend email**. The rules enforce it; accounts created before Oct 13, 2026 are exempt.
+**Email verification**: new accounts confirm their email (a link is sent at sign-up) before posting, commenting or following people. Until then, Home and Profile show a banner with **I've verified**, **Resend email** and **Wrong email? Change it**. **Profile → Change email** works anytime: it sends a link to the new address, and the change (and verification) happens when it's tapped. The rules enforce it; accounts created before Oct 13, 2026 are exempt.
 
 **App Check**: blocks requests that don't come from the real app (App Attest on iPhone, reCAPTCHA v3 on the website). It's off until set up; see [LAUNCH.md](LAUNCH.md#app-check-blocks-scripts-that-arent-your-app).
 

@@ -19,7 +19,7 @@ import {
   initializeApp, initializeAppCheck, ReCaptchaV3Provider, CustomProvider,
   initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, connectAuthEmulator,
   onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, sendPasswordResetEmail, sendEmailVerification, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
+  signOut, sendPasswordResetEmail, sendEmailVerification, verifyBeforeUpdateEmail, deleteUser, reauthenticateWithCredential, EmailAuthProvider,
   initializeFirestore, connectFirestoreEmulator,
   collection, collectionGroup, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, orderBy, limit,
   addDoc, writeBatch, runTransaction, serverTimestamp, increment, getCountFromServer,
@@ -256,6 +256,28 @@ export function createFirebaseBackend(config, { emulators = false, appCheck = nu
 
     // Email verification: posting, commenting and follow requests need it (see firestore.rules).
     sendVerification() { return sendEmailVerification(auth.currentUser); },
+    // Fix a mistyped email or switch to a new one. The change happens when the
+    // link sent to the new address is tapped, which also verifies it.
+    async changeEmail(newEmail, password) {
+      const user = auth.currentUser;
+      newEmail = newEmail.trim();
+      if (!newEmail) throw new BackendError('no-email', 'Enter your new email address.');
+      if (newEmail.toLowerCase() === (user.email || '').toLowerCase()) throw new BackendError('same-email', 'That’s already your email.');
+      try {
+        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password));
+      } catch (e) {
+        if (['auth/invalid-credential', 'auth/wrong-password', 'auth/missing-password'].includes(e.code)) {
+          throw new BackendError('bad-password', 'That password isn’t right.');
+        }
+        throw e;
+      }
+      try {
+        await verifyBeforeUpdateEmail(user, newEmail);
+      } catch (e) {
+        if (e.code === 'auth/email-already-in-use') throw new BackendError('email-taken', 'Another account already uses that email.');
+        throw e;
+      }
+    },
     // After tapping the link in the email: refresh the account so the rules see it.
     async checkVerified() {
       const u = auth.currentUser;

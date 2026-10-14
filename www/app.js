@@ -102,7 +102,8 @@ function toast(msg) {
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2400);
+  // Longer messages stay up longer so there's time to read them.
+  toastTimer = setTimeout(() => { t.hidden = true; }, Math.max(2400, msg.length * 70));
 }
 
 // ---------- Rendering ----------
@@ -443,7 +444,8 @@ function paintVerifyBanners() {
       <div class="verify-actions">
         <button class="primary-btn" data-verify="check">I’ve verified</button>
         <button class="ghost-btn" data-verify="resend">Resend email</button>
-      </div>`;
+      </div>
+      <button class="link-btn" data-verify="change">Wrong email? Change it</button>`;
   });
 }
 async function checkVerifiedNow() {
@@ -467,6 +469,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-verify]');
   if (!b) return;
   if (b.dataset.verify === 'check') checkVerifiedNow();
+  else if (b.dataset.verify === 'change') openEmailSheet();
   else resendVerification();
 });
 // Returns true if the action can go ahead; otherwise asks them to verify first.
@@ -475,9 +478,11 @@ async function requireVerified(what) {
   const key = await chooseAction(`Verify your email to ${what}. We sent a link to ${backend.email}.`, [
     { key: 'check', label: 'I’ve verified' },
     { key: 'resend', label: 'Resend email' },
+    { key: 'change', label: 'Wrong email? Change it' },
   ]);
   if (key === 'check') return checkVerifiedNow();
   if (key === 'resend') resendVerification();
+  if (key === 'change') openEmailSheet();
   return false;
 }
 
@@ -1240,6 +1245,7 @@ $('#post-submit').addEventListener('click', submitPost);
 $('#sheet-cancel').addEventListener('click', closeSheet);
 backdrop.addEventListener('click', () => {
   if (!cfSheet.hidden) closeCloseFriends();
+  else if (!emailSheet.hidden) closeEmailSheet();
   else if (!deleteSheet.hidden) closeDeleteSheet();
   else if (!commentsSheet.hidden) closeComments();
   else if (!blockedSheet.hidden) closeBlocked();
@@ -1256,6 +1262,7 @@ document.addEventListener('keydown', e => {
   else if (!requestsSheet.hidden) closeRequests();
   else if (!editSheet.hidden) closeEditProfile();
   else if (!cfSheet.hidden) closeCloseFriends();
+  else if (!emailSheet.hidden) closeEmailSheet();
   else if (!deleteSheet.hidden) closeDeleteSheet();
   else if (!sheet.hidden) closeSheet();
 });
@@ -1934,6 +1941,42 @@ $('#edit-save').addEventListener('click', saveProfile);
 $('#edit-form').addEventListener('submit', e => { e.preventDefault(); saveProfile(); });
 
 // ---------- Account ----------
+const emailSheet = $('#email-sheet');
+function openEmailSheet() {
+  if (!sheet.hidden) closeSheet();
+  $('#email-current').textContent = backend.email;
+  $('#email-new').value = '';
+  $('#email-password').value = '';
+  $('#email-error').hidden = true;
+  emailSheet.hidden = false;
+  backdrop.hidden = false;
+  $('#email-new').focus();
+}
+function closeEmailSheet() {
+  emailSheet.hidden = true;
+  backdrop.hidden = true;
+}
+$('#email-open').addEventListener('click', openEmailSheet);
+$('#email-cancel').addEventListener('click', closeEmailSheet);
+$('#email-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('#email-submit');
+  const newEmail = $('#email-new').value.trim();
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    await backend.changeEmail(newEmail, $('#email-password').value);
+    closeEmailSheet();
+    toast(`Link sent to ${newEmail}. Tap it, then sign in with that email.`);
+  } catch (err) {
+    console.error(err);
+    $('#email-error').textContent = friendlyError(err);
+    $('#email-error').hidden = false;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Send link';
+});
+
 const deleteSheet = $('#delete-sheet');
 function openDeleteSheet() {
   $('#delete-password').value = '';

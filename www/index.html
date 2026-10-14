@@ -153,6 +153,7 @@
         <h2 class="section-title">Account</h2>
         <p class="account-email" id="account-email"></p>
         <div class="account-actions">
+          <button class="ghost-btn" id="email-open">Change email</button>
           <button class="ghost-btn" id="sign-out">Sign out</button>
           <button class="ghost-btn danger" id="delete-open">Delete account</button>
         </div>
@@ -349,6 +350,28 @@
   </section>
 
   <!-- Delete account -->
+  <section class="sheet" id="email-sheet" role="dialog" aria-modal="true" aria-labelledby="email-title" hidden>
+    <div class="sheet-grip" aria-hidden="true"></div>
+    <header class="sheet-head">
+      <button class="text-btn" id="email-cancel">Cancel</button>
+      <h2 id="email-title">Change email</h2>
+      <span class="sheet-spacer"></span>
+    </header>
+    <form class="form" id="email-form" novalidate>
+      <p class="form-text">Now: <strong id="email-current"></strong>. We’ll send a link to your new address. Your email changes (and is verified) when you tap it. Then sign in with the new email.</p>
+      <label class="field">
+        <span>New email</span>
+        <input id="email-new" type="email" autocomplete="email" autocapitalize="off" required>
+      </label>
+      <label class="field">
+        <span>Your password</span>
+        <input id="email-password" type="password" autocomplete="current-password" required>
+      </label>
+      <p class="form-error" id="email-error" role="alert" hidden></p>
+      <button class="primary-btn" id="email-submit" type="submit">Send link</button>
+    </form>
+  </section>
+
   <section class="sheet" id="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-title" hidden>
     <div class="sheet-grip" aria-hidden="true"></div>
     <header class="sheet-head">
@@ -400,11 +423,11 @@
         </label>
         <label class="field" data-for="signup profile">
           <span>Handle</span>
-          <span class="handle-input"><span>@</span><input id="auth-handle" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="lowercase_letters"></span>
+          <span class="handle-input"><span>@</span><input id="auth-handle" type="text" autocomplete="nickname" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="lowercase_letters"></span>
         </label>
         <label class="field" data-for="signin signup reset">
           <span>Email</span>
-          <input id="auth-email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false">
+          <input id="auth-email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false">
         </label>
         <label class="field" data-for="signin signup">
           <span>Password</span>
