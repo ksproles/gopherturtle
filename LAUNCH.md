@@ -121,7 +121,7 @@ Watch Firebase console → **App Check** → **APIs** for a few days. When nearl
 
 ## Password AutoFill (iPhone suggests and saves passwords)
 
-1. `www/.well-known/apple-app-site-association` links the app to `gopher-turtle.web.app`. It needs your Apple **Team ID** in place of `TEAMID` (Claude does this when you send it).
+1. `www/.well-known/apple-app-site-association` links the app to `gopher-turtle.web.app`. It lists the app as `M4L6AZJ8YZ.snacktimemedia.twocents` (Team ID M4L6AZJ8YZ).
 2. Xcode → **App** target → **Signing & Capabilities** → **+ Capability** → **Associated Domains** → **+** → `webcredentials:gopher-turtle.web.app`.
 3. Build a new version. On sign-up, iPhone suggests a strong password and saves it to Passwords (with your email as the username); on sign-in, it offers to fill it in.
 
