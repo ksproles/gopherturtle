@@ -1,25 +1,25 @@
 /* Shared styles for the Privacy, Terms and Support pages. */
 :root {
-  --bg: #f3f5ef;
+  --bg: #f2f6fb;
   --surface: #ffffff;
-  --ink: #1b241e;
-  --ink-2: #5a665d;
-  --line: #d9dfd3;
-  --shell: #2f6b4f;
-  --link: #2f6b4f;
+  --ink: #0f1d33;
+  --ink-2: #52627a;
+  --line: #d5e0ee;
+  --shell: #1e4fa3;
+  --link: #2f5fd0;
   --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111512;
-    --surface: #1a201c;
-    --ink: #e8eee7;
-    --ink-2: #9aa79d;
-    --line: #2c352f;
-    --shell: #8cc7a5;
-    --link: #8cc7a5;
+    --bg: #0b1220;
+    --surface: #131c2e;
+    --ink: #e6edf8;
+    --ink-2: #93a3bd;
+    --line: #26344d;
+    --shell: #8fb4ff;
+    --link: #8fb4ff;
     color-scheme: dark;
   }
 }
@@ -38,7 +38,7 @@ body {
 }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 28px; }
 .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font: 800 21px/1 var(--font-display); }
-.brand svg { width: 28px; height: 28px; color: var(--shell); }
+.brand img { width: 28px; height: 28px; display: block; }
 .back { color: var(--ink-2); font-weight: 600; text-decoration: none; }
 .back:hover { color: var(--ink); }
 h1 { margin: 0; font: 800 34px/1.1 var(--font-display); letter-spacing: -.01em; text-wrap: balance; }

@@ -3,7 +3,7 @@
  * Data comes from a backend: demo (on-device examples) or Firebase (real accounts),
  * chosen by www/firebase-config.js.
  */
-import { BARS, rng, seededPeaks, synthMemo } from './audio-utils.js';
+import { BARS, rng, seededPeaks, synthMemo, colorFor } from './audio-utils.js';
 import { createDemoBackend } from './backend-demo.js';
 import { filterText } from './text-filter.js';
 import { firebaseConfig, appCheckConfig } from './firebase-config.js';
@@ -200,9 +200,12 @@ function renderList(el, memos, emptyText, reasons) {
   if (player.memo) markPlaying(player.memo.id, true);
 }
 
+// Initials sit on a blue picked from the person's id, so every account matches the app's colors.
+const avatarColor = u => (u && u.id ? colorFor(u.id) : '#52627a');
+
 // Profile header pieces shared by your profile and other people's.
 function paintAvatar(el, u) {
-  el.style.setProperty('--av', u.color || '#7a857c');
+  el.style.setProperty('--av', avatarColor(u));
   el.innerHTML = u.photoURL ? `<img src="${esc(u.photoURL)}" alt="">` : esc(initials(u.name || '?'));
 }
 function linkLabel(url) {
@@ -226,7 +229,7 @@ function avatarHTML(u, linkable, extraClass = '') {
   const inner = u.photoURL
     ? `<img src="${esc(u.photoURL)}" alt="" loading="lazy">`
     : esc(initials(u.name || '?'));
-  return `<div class="avatar${extraClass}" style="--av:${esc(u.color || '#7a857c')}"${attrs}>${inner}</div>`;
+  return `<div class="avatar${extraClass}" style="--av:${esc(avatarColor(u))}"${attrs}>${inner}</div>`;
 }
 
 function findMemo(id) {

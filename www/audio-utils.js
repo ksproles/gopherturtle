@@ -74,7 +74,8 @@ function wavBlob(samples, rate) {
   return new Blob([view], { type: 'audio/wav' });
 }
 
-const AVATAR_COLORS = ['#c2553a', '#3b6fb6', '#8a4fb0', '#2f8a7a', '#b5791f', '#4e6b2f', '#a3456b', '#5560b8', '#2f6b4f'];
+// Shades of blue to match the app (dark enough for white initials).
+const AVATAR_COLORS = ['#1e4fa3', '#2f5fd0', '#0b7fa3', '#3a4fb8', '#5a45c4', '#14628a', '#2c3e8f', '#3d6fd9', '#245a9e'];
 export function colorFor(id) {
   let h = 0;
   for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;

@@ -1,6 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#2f6b4f"/>
-  <circle cx="206" cy="256" r="132" fill="#a7d37f" opacity=".7"/>
-  <circle cx="306" cy="256" r="132" fill="#ffffff"/>
-  <path d="M328 204a62 62 0 1 0 0 104M306 172v34M306 306v34" fill="none" stroke="#2f6b4f" stroke-width="28" stroke-linecap="round"/>
+  <!-- TwoCents: someone whispering into someone's ear, close up -->
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a7bf0"/><stop offset="1" stop-color="#1b3f94"/></linearGradient><clipPath id="r"><rect width="512" height="512" rx="112"/></clipPath></defs>
+  <g clip-path="url(#r)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <!-- face in profile on the left, leaning in to whisper -->
+    <path d="M0 70H84C96 112 112 150 128 180C142 204 168 222 170 238C172 252 154 258 138 258
+             C150 266 166 272 166 282C166 292 150 296 140 296C156 304 162 318 152 330
+             C142 342 126 340 122 350C132 372 128 402 100 424C72 446 36 452 0 452Z" fill="#d6e4ff"/>
+    <!-- whisper -->
+    <path d="M196 252q18 26 0 52M228 230q32 48 0 96" fill="none" stroke="#fff" stroke-width="17" stroke-linecap="round"/>
+    <!-- ear, close up, on the right -->
+    <path d="M300 186c0-58 42-98 96-98 56 0 94 44 94 98 0 48-28 74-48 96-18 20-22 38-28 62-8 36-32 62-70 62-28 0-48-16-54-40"
+          fill="none" stroke="#fff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M360 194c0-24 17-41 38-41 22 0 37 17 37 39 0 24-18 35-31 46-11 9-15 20-15 33"
+          fill="none" stroke="#fff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>
+  </g>
 </svg>

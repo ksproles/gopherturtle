@@ -1,24 +1,26 @@
 /* Layout: one phone-width column — fixed top bar (brand + audience chips),
    scrolling feed of memo cards, fixed bottom tab bar, slide-up recorder sheet. */
 :root {
-  --bg: #f3f5ef;
+  /* Shades of blue. Light mode; dark mode below follows the phone's setting. */
+  --bg: #f2f6fb;
   --surface: #ffffff;
-  --surface-2: #e9ede4;
-  --ink: #1b241e;
-  --ink-2: #5a665d;
-  --line: #d9dfd3;
-  --shell: #2f6b4f;
+  --surface-2: #e6eef8;
+  --ink: #0f1d33;
+  --ink-2: #52627a;
+  --line: #d5e0ee;
+  --shell: #1e4fa3;
 
-  /* Audience colors — one per circle, used everywhere that audience appears */
-  --close: #23935d;
-  --close-soft: #dcf1e4;
-  --followers: #3a63d8;
-  --followers-soft: #dfe6fb;
-  --global: #d9701f;
-  --global-soft: #fbe6d4;
+  /* Audience colors — one blue per circle, used everywhere that audience appears */
+  --close: #0b8bb0;
+  --close-soft: #d9f0f7;
+  --followers: #2f5fd0;
+  --followers-soft: #dfe7fb;
+  --global: #6a4fd8;
+  --global-soft: #e9e4fb;
 
   --rec: #e0413a;
-  --shadow: 0 1px 2px rgb(27 36 30 / .06), 0 6px 18px rgb(27 36 30 / .06);
+  --backdrop: rgb(8 15 30 / .45);
+  --shadow: 0 1px 2px rgb(15 29 51 / .06), 0 6px 18px rgb(15 29 51 / .06);
 
   --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -29,40 +31,42 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111512;
-    --surface: #1a201c;
-    --surface-2: #232b25;
-    --ink: #e8eee7;
-    --ink-2: #9aa79d;
-    --line: #2c352f;
-    --shell: #8cc7a5;
-    --close: #48c784;
-    --close-soft: #183526;
+    --bg: #0b1220;
+    --surface: #131c2e;
+    --surface-2: #1b263b;
+    --ink: #e6edf8;
+    --ink-2: #93a3bd;
+    --line: #26344d;
+    --shell: #8fb4ff;
+    --close: #3cc4e4;
+    --close-soft: #0f2e3a;
     --followers: #7b9cff;
-    --followers-soft: #1c2747;
-    --global: #f39a52;
-    --global-soft: #3a2615;
+    --followers-soft: #1b2747;
+    --global: #a895ff;
+    --global-soft: #261f48;
     --rec: #ff5e55;
-    --shadow: 0 1px 2px rgb(0 0 0 / .3);
+    --backdrop: rgb(0 0 0 / .6);
+    --shadow: 0 1px 2px rgb(0 0 0 / .35);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #111512;
-  --surface: #1a201c;
-  --surface-2: #232b25;
-  --ink: #e8eee7;
-  --ink-2: #9aa79d;
-  --line: #2c352f;
-  --shell: #8cc7a5;
-  --close: #48c784;
-  --close-soft: #183526;
+  --bg: #0b1220;
+  --surface: #131c2e;
+  --surface-2: #1b263b;
+  --ink: #e6edf8;
+  --ink-2: #93a3bd;
+  --line: #26344d;
+  --shell: #8fb4ff;
+  --close: #3cc4e4;
+  --close-soft: #0f2e3a;
   --followers: #7b9cff;
-  --followers-soft: #1c2747;
-  --global: #f39a52;
-  --global-soft: #3a2615;
+  --followers-soft: #1b2747;
+  --global: #a895ff;
+  --global-soft: #261f48;
   --rec: #ff5e55;
-  --shadow: 0 1px 2px rgb(0 0 0 / .3);
+  --backdrop: rgb(0 0 0 / .6);
+  --shadow: 0 1px 2px rgb(0 0 0 / .35);
   color-scheme: dark;
 }
 
@@ -198,9 +202,9 @@ button { cursor: pointer; }
 /* ---------- Memo card ---------- */
 .memo {
   position: relative;
-  padding: 14px 14px 12px 19px;
+  padding: 11px 12px 8px 17px;
   background: var(--surface);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: inset 5px 0 0 var(--aud), var(--shadow);
 }
 .memo-head { display: flex; align-items: center; gap: 10px; }
@@ -216,13 +220,14 @@ button { cursor: pointer; }
   font-size: 12px;
   font-weight: 700;
 }
-.memo-caption { margin: 10px 0 0; overflow-wrap: anywhere; }
+.memo-caption { margin: 6px 0 0; overflow-wrap: anywhere; }
+.memo .memo-head .avatar { width: 36px; height: 36px; font-size: 14px; }
 
-.player { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.player { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .play-btn {
   flex: none;
   display: grid; place-items: center;
-  width: 44px; height: 44px;
+  width: 40px; height: 40px;
   border: 0; border-radius: 50%;
   background: var(--aud);
   color: var(--surface);
@@ -233,7 +238,7 @@ button { cursor: pointer; }
   transition: transform .15s;
 }
 .play-btn.is-holding { transform: scale(.9); }
-.play-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.play-btn svg { width: 16px; height: 16px; fill: currentColor; }
 /* Memos you've listened to: a "Listened" tag and a softer play button. */
 .heard-tag { display: inline-flex; align-items: center; gap: 2px; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
 .heard-tag svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -241,7 +246,7 @@ button { cursor: pointer; }
 .wave {
   flex: 1;
   min-width: 0;
-  height: 40px;
+  height: 32px;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -264,10 +269,10 @@ button { cursor: pointer; }
   font-variant-numeric: tabular-nums;
 }
 
-.memo-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; margin-left: -6px; }
+.memo-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 4px; margin-left: -6px; }
 .act {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 0; border-radius: 10px;
   background: none;
   color: var(--ink-2);
@@ -483,7 +488,7 @@ button { cursor: pointer; }
 /* ---------- Recorder sheet ---------- */
 .sheet-backdrop {
   position: absolute; inset: 0; z-index: 10;
-  background: rgb(10 14 11 / .45);
+  background: var(--backdrop);
   animation: fade .2s ease-out;
 }
 .sheet {
@@ -751,7 +756,7 @@ button { cursor: pointer; }
 .memo-actions .more-btn { margin-left: auto; }
 
 /* ---------- Action menu ---------- */
-.action-backdrop { position: absolute; inset: 0; z-index: 40; background: rgb(10 14 11 / .45); animation: fade .15s ease-out; }
+.action-backdrop { position: absolute; inset: 0; z-index: 40; background: var(--backdrop); animation: fade .15s ease-out; }
 .action-sheet {
   position: absolute; inset: auto 8px calc(env(safe-area-inset-bottom, 0px) + 8px) 8px;
   z-index: 41;
@@ -862,7 +867,7 @@ button { cursor: pointer; }
 }
 
 /* ---------- Tags ---------- */
-.memo-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.memo-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .tag-pill {
   padding: 4px 10px;
   border: 0;
