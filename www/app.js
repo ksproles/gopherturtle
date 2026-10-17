@@ -2178,7 +2178,7 @@ $('#boot-retry').addEventListener('click', () => location.reload());
 
 async function boot() {
   // The app's code loaded and is running, so keep this version and look for a newer one.
-  startLiveUpdates();
+  try { startLiveUpdates(); } catch (e) { console.warn('Live updates unavailable', e); }
   // Add ?emulators to the URL to use the local Firebase emulators (npm run emulators).
   const emulators = /[?&]emulators\b/.test(location.search);
   // The emulators always use a separate demo project, never your real one.
@@ -2210,7 +2210,11 @@ async function boot() {
     onSignedIn();
   });
 }
-boot();
+// Anything unexpected while starting shows a message and Try again, never an endless "Loading…".
+boot().catch(e => {
+  console.error('TwoCents could not start', e);
+  bootMessage('TwoCents couldn’t start. Try again, and if it keeps happening, tell us at owner@snacktimemedia.net.', true);
+});
 
 // Refresh the "5m ago" labels once a minute.
 setInterval(() => {

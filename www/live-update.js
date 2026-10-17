@@ -5,13 +5,16 @@
 // last version that worked. Native changes (new plugins, permissions, icons)
 // still need an App Store build: live/latest.json says which app version an
 // update needs (see live-update.json).
+import { nativePlugin } from './native.js';
+
 const MANIFEST_URL = 'https://gopher-turtle.web.app/live/latest.json';
 const CHECK_EVERY = 30 * 60 * 1000;
 
+// null on the website, which updates itself
+let plugin;
 function updater() {
-  const cap = window.Capacitor;
-  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null; // the website updates itself
-  return cap.registerPlugin('CapacitorUpdater');
+  if (plugin === undefined) plugin = nativePlugin('CapacitorUpdater');
+  return plugin;
 }
 
 // Tells the plugin this version started fine, so it keeps it.
@@ -60,7 +63,12 @@ export async function checkForUpdate() {
 
 // Check on launch and whenever the app comes back to the front (at most every 30 minutes).
 export function startLiveUpdates() {
-  if (!updater()) return;
+  try {
+    if (!updater()) return;
+  } catch (e) {
+    console.warn('Live updates unavailable', e);
+    return;
+  }
   confirmAppReady();
   checkForUpdate();
   document.addEventListener('visibilitychange', () => {

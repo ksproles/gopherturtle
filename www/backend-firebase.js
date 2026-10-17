@@ -26,6 +26,7 @@ import {
   getStorage, connectStorageEmulator, ref, uploadBytes, getDownloadURL, deleteObject,
 } from './vendor/firebase.js';
 import { colorFor } from './audio-utils.js';
+import { nativePlugin } from './native.js';
 
 const FEED_LIMIT = 100;
 // Accounts created from this date on confirm their email before posting.
@@ -75,7 +76,8 @@ function startAppCheck(app, opts) {
   try {
     if (cap && cap.isNativePlatform && cap.isNativePlatform()) {
       if (!opts.ios || cap.getPlatform() !== 'ios') return;
-      const plugin = cap.registerPlugin('FirebaseAppCheck');
+      const plugin = nativePlugin('FirebaseAppCheck');
+      if (!plugin) return;
       const ready = plugin.initialize({ isTokenAutoRefreshEnabled: true });
       // Never let App Check hold up the app: if Apple's check is slow or fails,
       // carry on without a token (requests still work while it isn't enforced).
