@@ -1,0 +1,4 @@
+{
+  "minNative": "1.0",
+  "_note": "Live updates only reach installed apps whose version (Xcode → General → Version) is at least minNative. After adding a plugin, permission or other native change, raise the app's Version in Xcode, ship that build, and set minNative to match."
+}

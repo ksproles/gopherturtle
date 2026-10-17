@@ -131,6 +131,10 @@ One-time setup:
 
 Check progress under the repository's **Actions** tab. A green check means the update is live.
 
+### Live updates to the installed apps
+
+The same deploy publishes a live update of `www/` (`www/live/latest.json` plus a zip). Installed iPhone and Android apps download it in the background and use it the next time they're opened, so most changes reach phones without a new App Store build. Native changes still need one; see [LAUNCH.md](LAUNCH.md) → Shipping updates.
+
 ### Updating the rules after a change
 
 With automatic updates set up, rules changes are published on every push. Without it, changes to `firestore.rules` or `storage.rules` don't reach Firebase on their own: paste the file's contents into the **Rules** tab in the Firebase console and click **Publish**, or run `npx firebase deploy --only firestore,storage` from your computer.

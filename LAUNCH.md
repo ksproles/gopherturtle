@@ -145,7 +145,8 @@ There are three kinds of changes, and each reaches people differently.
 | --- | --- | --- |
 | Security rules and database indexes | Live within ~2 minutes of Claude pushing (GitHub Actions) | None |
 | The web version (gopher-turtle.web.app) | Live within ~2 minutes of Claude pushing | None |
-| The iPhone and Android apps | A new version through the stores (or a live update, below) | Build → test → submit |
+| Screens, features and fixes in the iPhone and Android apps | **Live update**: installed apps download it in the background and switch to it the next time they're reopened | None |
+| Native changes (new plugins, permissions, icons, Info.plist) | A new version through the stores | Build → test → submit (see below) |
 
 **Store update steps:**
 1. Claude makes the change, pushes it, and bumps the version number.
@@ -154,6 +155,8 @@ There are three kinds of changes, and each reaches people differently.
 4. Submit for review. Apple usually takes about a day; Google takes from a few hours to a few days.
 5. Release. You can do a phased rollout to a small share of users first.
 
-**Live updates (optional, recommended once you're updating often):** a service like **Capgo** or **Ionic Appflow Live Updates** pushes changes to the app's screens and logic straight to installed apps without a store review. Apple allows this for bug fixes and improvements that don't change what the app is for. Native changes (new permissions, new plugins) still need a store release.
+**Live updates (set up):** every push builds `www/` into a zip and publishes it with `www/live/latest.json` at https://gopher-turtle.web.app/live/ (see `scripts/build-live-update.sh`). The app (`www/live-update.js`, using the open-source `@capgo/capacitor-updater` plugin with its cloud service and stats turned off) checks that file when it opens and every 30 minutes while it's open, downloads a newer version in the background, verifies its checksum, and switches to it the next time the app is reopened. If a new version fails to start, the app goes back to the previous one. Apple allows this for fixes and improvements that don't change what the app is for.
+
+**When a native change is needed** (a new plugin, permission, icon or Info.plist setting): in Xcode raise **Version** (for example 1.0 → 1.1), build and release it, and set `minNative` in `live-update.json` to the same number. Live updates then only go to phones that have that version, so older apps never get code they can't run.
 
 **Keep old versions working.** People don't all update right away, so rules and data changes have to keep working with the previous app version for a while. Claude keeps this in mind when changing rules.

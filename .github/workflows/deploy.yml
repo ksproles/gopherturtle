@@ -1,5 +1,6 @@
 # On every push: run the security rules tests, then publish the web app,
-# Firestore rules + indexes and Storage rules to the gopher-turtle Firebase project.
+# Firestore rules + indexes and Storage rules to the gopher-turtle Firebase project,
+# plus a live update (www/live/) that installed iPhone and Android apps pick up.
 # Needs a repository secret named FIREBASE_SERVICE_ACCOUNT (see README → "Automatic updates").
 name: Test and deploy
 
@@ -56,6 +57,9 @@ jobs:
           cache: npm
       - if: steps.creds.outputs.ok == 'true'
         run: npm ci
+      - name: Build live update for the installed apps
+        if: steps.creds.outputs.ok == 'true'
+        run: ./scripts/build-live-update.sh
       - name: Deploy app, rules and indexes
         if: steps.creds.outputs.ok == 'true'
         env:

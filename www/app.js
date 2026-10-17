@@ -7,6 +7,7 @@ import { BARS, rng, seededPeaks, synthMemo, colorFor } from './audio-utils.js';
 import { createDemoBackend } from './backend-demo.js';
 import { filterText } from './text-filter.js';
 import { firebaseConfig, appCheckConfig } from './firebase-config.js';
+import { startLiveUpdates } from './live-update.js';
 
 // ---------- Constants ----------
 const AUDIENCES = {
@@ -2176,6 +2177,8 @@ function bootMessage(text, retry) {
 $('#boot-retry').addEventListener('click', () => location.reload());
 
 async function boot() {
+  // The app's code loaded and is running, so keep this version and look for a newer one.
+  startLiveUpdates();
   // Add ?emulators to the URL to use the local Firebase emulators (npm run emulators).
   const emulators = /[?&]emulators\b/.test(location.search);
   // The emulators always use a separate demo project, never your real one.
