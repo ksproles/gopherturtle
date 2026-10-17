@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#faf6f0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17120e" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <title>cc me</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="fonts/fonts.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-mark" src="icons/icon.svg" alt="" aria-hidden="true">
+      <h1>cc me</h1>
+    </div>
+    <p class="topbar-date" id="topbar-date"></p>
+  </header>
+
+  <main class="screens">
+    <!-- Today: your status and where you're working, plus who's around -->
+    <section class="screen" id="screen-today" aria-label="Today">
+      <h2 class="greeting" id="greeting"></h2>
+
+      <form class="card checkin" id="checkin-form" hidden>
+        <fieldset class="field">
+          <legend>How are you working today?</legend>
+          <div class="status-picker" id="status-picker"></div>
+        </fieldset>
+        <label class="field">
+          <span>Where are you working from?</span>
+          <input id="ci-city" list="city-list" autocomplete="off" maxlength="60" placeholder="City" required>
+        </label>
+        <div class="field">
+          <span id="ci-spot-label">Spot <small>(optional)</small></span>
+          <div class="pill-row" id="spot-picker" role="group" aria-labelledby="ci-spot-label"></div>
+          <input id="ci-spot" maxlength="60" placeholder="Or type it, e.g. Merit Coffee on 5th" aria-labelledby="ci-spot-label">
+        </div>
+        <label class="field">
+          <span>Anything to add? <small>(optional)</small></span>
+          <input id="ci-note" maxlength="100" placeholder="e.g. Big table by the window, lunch ~12:30">
+        </label>
+        <div class="row-end">
+          <button type="button" class="ghost-btn" id="ci-cancel">Cancel</button>
+          <button type="submit" class="primary-btn">Check in for today</button>
+        </div>
+      </form>
+
+      <section class="card today-card" id="today-card" hidden></section>
+
+      <section class="block" id="around" aria-labelledby="around-title">
+        <div class="block-head">
+          <h3 class="section-title" id="around-title"></h3>
+          <button class="link-btn" id="around-all">See everyone</button>
+        </div>
+        <div class="status-counts" id="status-counts"></div>
+        <ul class="people" id="around-list"></ul>
+      </section>
+
+      <section class="block" id="waves" aria-labelledby="waves-title" hidden>
+        <h3 class="section-title" id="waves-title">Waves</h3>
+        <p class="muted small">People who'd like to connect. Wave back, or find them on Discord.</p>
+        <ul class="people" id="waves-list"></ul>
+      </section>
+    </section>
+
+    <!-- People: everyone, by city and status -->
+    <section class="screen" id="screen-people" aria-label="People" hidden>
+      <h2 class="screen-title">People</h2>
+      <div class="pill-row scroll-x" id="city-filter" role="group" aria-label="City"></div>
+      <div class="pill-row scroll-x" id="status-filter" role="group" aria-label="Status"></div>
+      <p class="muted small" id="people-label"></p>
+      <ul class="people" id="people-list"></ul>
+    </section>
+
+    <!-- Community: the Discord -->
+    <section class="screen" id="screen-community" aria-label="Community" hidden>
+      <h2 class="screen-title">Community</h2>
+      <div class="card discord-card">
+        <div class="discord-head">
+          <svg class="discord-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18.2 18.2 0 0 0-5.6 0L8.6 3a19.5 19.5 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.7 19.7 0 0 0 6 3l1.3-2a12.7 12.7 0 0 1-2-1l.5-.4a14 14 0 0 0 12.2 0l.5.4-2 1 1.3 2a19.6 19.6 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.5 8 10.5s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
+          <div>
+            <h3>The cc me Discord</h3>
+            <p class="muted small">Hang out in the general channels or join the one for your city.</p>
+          </div>
+        </div>
+        <a class="primary-btn block-btn" id="discord-join" target="_blank" rel="noopener">Join the Discord</a>
+        <p class="note" id="discord-note" hidden>The Discord isn't open yet. Here's how it will be laid out.</p>
+      </div>
+
+      <h3 class="section-title">Your cities</h3>
+      <ul class="channels" id="my-channels"></ul>
+
+      <h3 class="section-title">Everyone</h3>
+      <ul class="channels" id="general-channels"></ul>
+
+      <h3 class="section-title">Cities</h3>
+      <ul class="channels" id="city-channels"></ul>
+      <p class="muted small">Don't see your city? Ask in <a href="#" id="city-requests-link">#city-requests</a> and it'll get a channel.</p>
+    </section>
+
+    <!-- Profile -->
+    <section class="screen" id="screen-profile" aria-label="Your profile" hidden>
+      <div id="profile-view"></div>
+
+      <form class="card profile-form" id="profile-form" hidden>
+        <h2 class="screen-title">Edit profile</h2>
+        <label class="field"><span>Name</span><input id="pf-name" maxlength="40" required autocomplete="name"></label>
+        <label class="field"><span>Username</span><input id="pf-handle" maxlength="20" pattern="[a-z0-9_]{3,20}" required autocapitalize="off" spellcheck="false" placeholder="3–20 letters, numbers or _"></label>
+        <label class="field">
+          <span>Base location</span>
+          <input id="pf-city" list="city-list" maxlength="60" required autocomplete="off" placeholder="Where you usually work from">
+        </label>
+        <fieldset class="field">
+          <legend>Default status <small>(used on days you don't check in)</small></legend>
+          <div class="status-picker" id="pf-status"></div>
+        </fieldset>
+        <label class="field">
+          <span>What are you working on?</span>
+          <textarea id="pf-working" maxlength="200" rows="3" placeholder="Your job, side project, company, what you're learning…"></textarea>
+        </label>
+        <label class="field"><span>Website <small>(optional)</small></span><input id="pf-website" type="text" maxlength="200" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="yoursite.com"></label>
+        <label class="field"><span>Discord username <small>(optional, so people can find you)</small></span><input id="pf-discord" maxlength="32" autocapitalize="off" spellcheck="false"></label>
+        <fieldset class="field">
+          <legend>Open to</legend>
+          <div class="pill-row" id="pf-open"></div>
+        </fieldset>
+        <div class="row-end">
+          <button type="button" class="ghost-btn" id="pf-cancel">Cancel</button>
+          <button type="submit" class="primary-btn">Save</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Sections">
+    <button class="tab" data-tab="today" aria-current="page"><span class="tab-icon" aria-hidden="true">☀️</span>Today</button>
+    <button class="tab" data-tab="people"><span class="tab-icon" aria-hidden="true">🧑‍💻</span>People</button>
+    <button class="tab" data-tab="community"><span class="tab-icon" aria-hidden="true">💬</span>Community</button>
+    <button class="tab" data-tab="profile"><span class="tab-icon" aria-hidden="true">🙂</span>Profile</button>
+  </nav>
+
+  <!-- Someone's profile, as a sheet -->
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <div class="sheet" id="person-sheet" role="dialog" aria-modal="true" aria-labelledby="ps-name" hidden>
+    <button class="sheet-close" id="ps-close" aria-label="Close">✕</button>
+    <div id="person-body"></div>
+  </div>
+
+  <!-- First run -->
+  <div class="onboard" id="onboard" hidden>
+    <form class="onboard-inner" id="onboard-form">
+      <img class="onboard-mark" src="icons/icon.svg" alt="" aria-hidden="true">
+      <h2>Work remotely, not alone.</h2>
+      <p class="muted">cc me shows who's working near you today, and whether they're up for a chat, free on breaks, or heads-down.</p>
+      <label class="field"><span>Your name</span><input id="ob-name" maxlength="40" required autocomplete="name"></label>
+      <label class="field"><span>Where do you usually work from?</span><input id="ob-city" list="city-list" maxlength="60" required autocomplete="off" placeholder="City"></label>
+      <fieldset class="field">
+        <legend>Most days, you're…</legend>
+        <div class="status-picker" id="ob-status"></div>
+      </fieldset>
+      <button type="submit" class="primary-btn block-btn">Get started</button>
+    </form>
+  </div>
+
+  <datalist id="city-list"></datalist>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

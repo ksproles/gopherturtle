@@ -1,0 +1,12 @@
+{
+  "name": "cc me",
+  "short_name": "cc me",
+  "description": "Find the remote workers around you today: who's up for a chat, who's free on breaks, and who's heads-down.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#faf6f0",
+  "theme_color": "#d9542a",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "ccme",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "cc me — a coworking app for people who work remotely",
+  "scripts": {
+    "serve": "python3 -m http.server 8010 --directory www",
+    "setup:discord": "node scripts/setup-discord.mjs"
+  }
+}
