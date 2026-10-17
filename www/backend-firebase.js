@@ -77,12 +77,24 @@ function startAppCheck(app, opts) {
       if (!opts.ios || cap.getPlatform() !== 'ios') return;
       const plugin = cap.registerPlugin('FirebaseAppCheck');
       const ready = plugin.initialize({ isTokenAutoRefreshEnabled: true });
+      // Never let App Check hold up the app: if Apple's check is slow or fails,
+      // carry on without a token (requests still work while it isn't enforced).
+      const withinSeconds = (promise, s) => Promise.race([promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('App Check timed out')), s * 1000))]);
+      // Firebase asks twice in a row when a try fails, so remember a failure for a
+      // minute and answer straight away instead of waiting again.
+      let failedUntil = 0;
       initializeAppCheck(app, {
         provider: new CustomProvider({
           getToken: async () => {
-            await ready;
-            const r = await plugin.getToken({ forceRefresh: false });
-            return { token: r.token, expireTimeMillis: r.expireTimeMillis };
+            if (Date.now() < failedUntil) throw new Error('App Check unavailable');
+            try {
+              const r = await withinSeconds(ready.then(() => plugin.getToken({ forceRefresh: false })), 2);
+              return { token: r.token, expireTimeMillis: r.expireTimeMillis };
+            } catch (e) {
+              failedUntil = Date.now() + 60 * 1000;
+              throw e;
+            }
           },
         }),
         isTokenAutoRefreshEnabled: true,
